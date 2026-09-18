@@ -53,8 +53,8 @@ export interface DesktopMarketSnapshot {
 }
 
 const DEFAULT_SNAPSHOT: DesktopMarketSnapshot = Object.freeze({
-  requested: 'disabled',
-  effective: 'disabled',
+  requested: 'dsh-market',
+  effective: 'dsh-market',
   legacyDefaulted: true,
 })
 

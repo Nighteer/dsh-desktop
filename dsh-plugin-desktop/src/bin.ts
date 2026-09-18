@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import {
   DESKTOP_PACKAGE_NAME,
-  DESKTOP_PRODUCT_NAME,
+  DESKTOP_USER_DATA_DIRECTORY_NAME,
 } from './product-identity.ts'
 
 /** Parsed launcher action. */
@@ -57,11 +57,11 @@ export function defaultDesktopUserDataDirectory(
     if (appData === undefined || appData.length === 0) {
       throw new Error('APPDATA is unavailable; cannot locate DSH Desktop diagnostics')
     }
-    return path.join(appData, DESKTOP_PRODUCT_NAME)
+    return path.join(appData, DESKTOP_USER_DATA_DIRECTORY_NAME)
   }
-  if (platform === 'darwin') return path.join(homeDirectory, 'Library', 'Application Support', DESKTOP_PRODUCT_NAME)
+  if (platform === 'darwin') return path.join(homeDirectory, 'Library', 'Application Support', DESKTOP_USER_DATA_DIRECTORY_NAME)
   const config = environment.XDG_CONFIG_HOME
-  return path.join(config === undefined || config.length === 0 ? path.join(homeDirectory, '.config') : config, DESKTOP_PRODUCT_NAME)
+  return path.join(config === undefined || config.length === 0 ? path.join(homeDirectory, '.config') : config, DESKTOP_USER_DATA_DIRECTORY_NAME)
 }
 
 export interface DesktopCliOptions {

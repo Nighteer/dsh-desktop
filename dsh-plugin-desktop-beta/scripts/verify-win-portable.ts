@@ -5,12 +5,15 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import AdmZip from 'adm-zip'
 import { assertPortableExecutableBuffer } from './verify-win-installer.ts'
+import { productArtifactStem, readDesktopProductName } from './product-name.ts'
 
 export interface WindowsPortableVerificationOptions {
   /** Desktop package root containing package.json and dist. */
   readonly desktopRoot: string
   /** Product version embedded in the expected artifact name. */
   readonly version: string
+  /** Optional test override; production derives this from Electron Builder metadata. */
+  readonly productName?: string
 }
 
 function readVersion(desktopRoot: string): string {
@@ -32,10 +35,11 @@ function defaultOptions(): WindowsPortableVerificationOptions {
 export function verifyWindowsPortable(
   options: WindowsPortableVerificationOptions = defaultOptions(),
 ): string {
+  const productName = options.productName ?? readDesktopProductName(options.desktopRoot)
   const portablePath = join(
     options.desktopRoot,
     'dist',
-    `DSH-Desktop-Beta-${options.version}-x64-Portable.zip`,
+    `${productArtifactStem(productName)}-${options.version}-x64-Portable.zip`,
   )
   const stat = statSync(portablePath)
   if (!stat.isFile() || stat.size === 0) {
@@ -43,9 +47,10 @@ export function verifyWindowsPortable(
   }
   const archive = new AdmZip(portablePath)
   const entries = archive.getEntries().filter(entry => !entry.isDirectory)
-  const executable = entries.find(entry => entry.entryName.replaceAll('\\', '/') === 'DSH Desktop Beta.exe')
+  const executableName = `${productName}.exe`
+  const executable = entries.find(entry => entry.entryName.replaceAll('\\', '/') === executableName)
   if (executable === undefined) {
-    throw new Error(`Windows portable archive is missing DSH Desktop Beta.exe: ${portablePath}`)
+    throw new Error(`Windows portable archive is missing ${executableName}: ${portablePath}`)
   }
   if (!entries.some(entry => entry.entryName.replaceAll('\\', '/') === 'resources/app/package.json')) {
     throw new Error(`Windows portable archive is missing resources/app/package.json: ${portablePath}`)
@@ -53,7 +58,7 @@ export function verifyWindowsPortable(
   assertPortableExecutableBuffer(
     executable.getData(),
     'Windows portable application',
-    `${portablePath}:DSH Desktop Beta.exe`,
+    `${portablePath}:${executableName}`,
   )
   return portablePath
 }

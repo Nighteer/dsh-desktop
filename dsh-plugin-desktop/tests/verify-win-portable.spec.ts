@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
@@ -20,9 +20,10 @@ function fixture(version = '2.0.0'): { readonly root: string; readonly portable:
   temporaryRoots.push(root)
   const dist = join(root, 'dist')
   mkdirSync(dist, { recursive: true })
-  const portable = join(dist, `DSH-Desktop-${version}-x64-Portable.zip`)
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ build: { productName: 'LETSDSH Desktop' } }))
+  const portable = join(dist, `LETSDSH-Desktop-${version}-x64-Portable.zip`)
   const archive = new AdmZip()
-  archive.addFile('DSH Desktop.exe', portableExecutable())
+  archive.addFile('LETSDSH Desktop.exe', portableExecutable())
   archive.addFile('resources/app/package.json', Buffer.from('{}'))
   archive.writeZip(portable)
   return { root, portable }
@@ -43,7 +44,7 @@ describe('Windows portable artifact verification', () => {
     const value = fixture('1.9.0')
 
     expect(() => verifyWindowsPortable({ desktopRoot: value.root, version: '2.0.0' }))
-      .toThrow('DSH-Desktop-2.0.0-x64-Portable.zip')
+      .toThrow('LETSDSH-Desktop-2.0.0-x64-Portable.zip')
   })
 
   it('rejects an application entry without a Windows PE header', () => {
@@ -51,7 +52,7 @@ describe('Windows portable artifact verification', () => {
     const invalid = portableExecutable()
     invalid.write('NO', 0, 'ascii')
     const archive = new AdmZip()
-    archive.addFile('DSH Desktop.exe', invalid)
+    archive.addFile('LETSDSH Desktop.exe', invalid)
     archive.addFile('resources/app/package.json', Buffer.from('{}'))
     archive.writeZip(value.portable)
 

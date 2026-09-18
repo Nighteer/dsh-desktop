@@ -79,6 +79,7 @@ export const DESKTOP_PROFILE_ROOT = 'cordis.yml'
 
 const AA_PACKAGE_NAME = '@agents-anywhere/dsh-bridge-next'
 const AA_ROW_ID = 'agents-anywhere-bridge-next'
+const DSH_IM_PACKAGE_NAME = '@xmanrui/dsh-im'
 const BIN_NAME = DESKTOP_PACKAGE_NAME
 const REQUIRED_BUNDLES = requiredWebBundles()
 const REQUIRED_BUNDLE_SET = new Set(REQUIRED_BUNDLES)
@@ -109,8 +110,8 @@ const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
 const UI_SIDEBAR_PACKAGE = '@deepseek-ai/dsh-client-ui-sidebar'
 const UI_CONVERSATION_PACKAGE = '@deepseek-ai/dsh-client-ui-conversation'
 const DEFAULT_DESKTOP_MARKET_SNAPSHOT: DesktopMarketSnapshot = Object.freeze({
-  requested: 'disabled',
-  effective: 'disabled',
+  requested: 'dsh-market',
+  effective: 'dsh-market',
   legacyDefaulted: true,
 })
 const MARKET_ROW_IDS: ReadonlySet<string> = new Set([
@@ -318,8 +319,9 @@ export interface SkippedOptionalEntry {
 export function desktopBundleList(current: readonly string[]): string[] {
   const thirdParty = current.filter(name => !REQUIRED_BUNDLE_SET.has(name)
     && !DESKTOP_PACKAGE_NAMES.has(name)
-    && !OBSOLETE_DESKTOP_BUNDLE_SET.has(name))
-  return [...REQUIRED_BUNDLES, ...thirdParty]
+    && !OBSOLETE_DESKTOP_BUNDLE_SET.has(name)
+    && name !== DSH_IM_PACKAGE_NAME)
+  return [...REQUIRED_BUNDLES, DSH_IM_PACKAGE_NAME, ...thirdParty]
 }
 
 /** Return whether two ordered string lists are identical. */

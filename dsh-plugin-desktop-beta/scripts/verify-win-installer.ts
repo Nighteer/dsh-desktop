@@ -3,6 +3,7 @@
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { productArtifactStem, readDesktopProductName } from './product-name.ts'
 
 /** Verify a complete in-memory Windows PE image. */
 export function assertPortableExecutableBuffer(data: Buffer, label: string, source: string): void {
@@ -32,6 +33,8 @@ export interface WindowsInstallerVerificationOptions {
   readonly desktopRoot: string
   /** Product version embedded in the expected artifact name. */
   readonly version: string
+  /** Optional test override; production derives this from Electron Builder metadata. */
+  readonly productName?: string
 }
 
 function readVersion(desktopRoot: string): string {
@@ -88,11 +91,12 @@ export function verifyWindowsInstaller(
   options: WindowsInstallerVerificationOptions = defaultOptions(),
 ): WindowsInstallerArtifacts {
   const distDir = join(options.desktopRoot, 'dist')
+  const productName = options.productName ?? readDesktopProductName(options.desktopRoot)
   const installerPath = join(
     distDir,
-    `DSH-Desktop-Beta-${options.version}-x64-Setup.exe`,
+    `${productArtifactStem(productName)}-${options.version}-x64-Setup.exe`,
   )
-  const applicationPath = join(distDir, 'win-unpacked', 'DSH Desktop Beta.exe')
+  const applicationPath = join(distDir, 'win-unpacked', `${productName}.exe`)
 
   assertPortableExecutable(installerPath, 'Windows NSIS installer')
   assertPortableExecutable(applicationPath, 'unpacked Windows application')

@@ -128,19 +128,24 @@ describe('desktop profile composition', {
     ), 'utf8')).toBe('# Cordis plugin development\n')
   })
 
-  it('adds the Web surface before third-party bundles and removes the launcher bundle duplicate', () => {
+  it('adds the Web surface and DSH-IM before third-party bundles and removes duplicates', () => {
     expect(desktopBundleList([
       '@deepseek-ai/dsh-base',
+      '@xmanrui/dsh-im',
       'third-party-one',
       'dsh-plugin-desktop',
       DESKTOP_PACKAGE_NAME,
       'third-party-two',
+      '@xmanrui/dsh-im',
     ])).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
+      '@xmanrui/dsh-im',
       'third-party-one',
       'third-party-two',
     ])
+    expect(desktopBundleList(['@xmanrui/dsh-im'])
+      .filter(name => name === '@xmanrui/dsh-im')).toHaveLength(1)
   })
 
   it('repairs a base-only CLI profile without replacing dependencies', () => {
@@ -164,10 +169,23 @@ describe('desktop profile composition', {
     expect(repaired.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
+      '@xmanrui/dsh-im',
       'third-party-plugin',
     ])
     expect(repaired.dependencies).toEqual({ 'third-party-plugin': '^1.2.3' })
     expect(repaired.custom.preserved).toBe(true)
+  })
+
+  it('loads DSH-IM from the packaged default desktop bundle layer', () => {
+    const home = temporaryHome()
+
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin')
+
+    expect(prepared.profile.layers.filter(layer => layer.packageName === '@xmanrui/dsh-im')).toHaveLength(1)
+    expect(composeEntries([prepared.patches])).toContainEqual({
+      id: 'xmanrui-dsh-im',
+      name: '@xmanrui/dsh-im',
+    })
   })
 
   it('migrates the obsolete Desktop bundle before loading a historical profile', () => {
@@ -195,6 +213,7 @@ describe('desktop profile composition', {
     expect(repaired.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
+      '@xmanrui/dsh-im',
     ])
   })
 
@@ -460,18 +479,21 @@ virtualStoreDirMaxLength: 60
     )).toThrow('LAN address "desktop.internal" is not an IPv4 literal')
   })
 
-  it('keeps both Market providers absent until the user explicitly enables one', () => {
+  it('selects dsh-market when no machine-level provider state exists', () => {
     const home = temporaryHome()
     const prepared = prepareDesktopProfile(undefined, home, 'darwin')
     const rows = composeEntries([prepared.patches])
 
     expect(prepared.market).toEqual({
-      requested: 'disabled',
-      effective: 'disabled',
+      requested: 'dsh-market',
+      effective: 'dsh-market',
       legacyDefaulted: true,
     })
-    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId
-      || row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
+    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId)).toBe(false)
+    expect(rows).toContainEqual({
+      id: DESKTOP_MARKET_IDENTITIES.dshMarket.rowId,
+      name: DESKTOP_MARKET_IDENTITIES.dshMarket.packageName,
+    })
   })
 
   it('inserts the community Market as one canonical row only after explicit selection', () => {
@@ -636,7 +658,11 @@ virtualStoreDirMaxLength: 60
     writeFileSync(manifestPath, JSON.stringify(manifest, undefined, 2) + '\n')
     installBundle(home, DESKTOP_MARKET_IDENTITIES.dshMarket.packageName, 'not: [valid yaml')
 
-    const prepared = prepareDesktopProfile(undefined, home, 'darwin')
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin', 'desktop', undefined, {
+      requested: 'disabled',
+      effective: 'disabled',
+      legacyDefaulted: false,
+    })
     const rows = composeEntries([prepared.patches])
 
     expect(prepared.market.effective).toBe('disabled')

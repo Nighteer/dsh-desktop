@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, dev-lets]
   push:
-    branches: [master]
+    branches: [master, dev-lets]
   workflow_dispatch:
 
 permissions:
@@ -118,7 +118,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace: [dsh-plugin-desktop, dsh-plugin-desktop-beta]
+        include:
+          - workspace: dsh-plugin-desktop
+            artifact: 'LETSDSH-Desktop'
+          - workspace: dsh-plugin-desktop-beta
+            artifact: 'LETSDSH-Desktop-Beta'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -146,6 +150,14 @@ jobs:
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: yarn workspace ${{ matrix.workspace }} dist:win-portable
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}-Windows
+          if-no-files-found: error
+          path: |
+            ${{ matrix.workspace }}/dist/*-Setup.exe
+            ${{ matrix.workspace }}/dist/*-Portable.zip
 
   # macOS-only universal packaging smoke on a real macOS runner: the signed
   # release is built manually on a credentialed machine, so an unsigned DMG
@@ -159,7 +171,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace: [dsh-plugin-desktop, dsh-plugin-desktop-beta]
+        include:
+          - workspace: dsh-plugin-desktop
+            artifact: 'LETSDSH-Desktop'
+          - workspace: dsh-plugin-desktop-beta
+            artifact: 'LETSDSH-Desktop-Beta'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -183,6 +199,12 @@ jobs:
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: yarn workspace ${{ matrix.workspace }} dist:mac-smoke
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}-macOS
+          if-no-files-found: error
+          path: ${{ matrix.workspace }}/dist/mac-smoke/*.dmg
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the
   # pinned submodule's own Yarn/pnpm release on Windows.

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import {
   copyFileSync,
@@ -767,7 +766,7 @@ describe('published package surface', () => {
   it('fixes the installed application identity', () => {
     expect(workspaceManifest.version).toBeUndefined()
     expect(manifest.version).toBe('2.0.12')
-    expect(manifest.build?.productName).toBe('DSH Desktop')
+    expect(manifest.build?.productName).toBe('LETSDSH Desktop')
     expect(manifest.build?.appId).toBe('ai.deepseek.dsh.desktop')
     expect(manifest.build?.asar).toBe(false)
     expect(manifest.build).not.toHaveProperty('asarUnpack')
@@ -810,7 +809,7 @@ describe('published package surface', () => {
       target: 'nsis',
       arch: ['x64'],
     }])
-    expect(manifest.build?.win?.artifactName).toBe('DSH-Desktop-${version}-${arch}-Portable.${ext}')
+    expect(manifest.build?.win?.artifactName).toBe('LETSDSH-Desktop-${version}-${arch}-Portable.${ext}')
     expect(manifest.build?.nsis).toEqual({
       include: 'installer.nsh',
       installerIcon: 'build/app-icon.ico',
@@ -822,10 +821,10 @@ describe('published package surface', () => {
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
       differentialPackage: false,
-      shortcutName: 'DSH Desktop',
+      shortcutName: 'LETSDSH Desktop',
       uninstallerIcon: 'build/app-icon.ico',
       useZip: false,
-      artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
+      artifactName: 'LETSDSH-Desktop-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
   })
@@ -834,6 +833,7 @@ describe('published package surface', () => {
     const packageDir = readFileSync(new URL('scripts/package-dir.mjs', packageRoot), 'utf8')
 
     expect(manifest.scripts?.build).toContain('node scripts/generate-windows-app-icon.mjs')
+    expect(manifest.scripts?.build).toContain('node scripts/prepare-lets-brand-assets.mjs')
     expect(manifest.scripts?.build).toContain('node scripts/generate-mac-app-icon.mjs')
     expect(manifest.scripts?.['package:dir']).toBe('yarn run build && yarn run prepare:electron-native && node scripts/package-dir.mjs')
     expect(packageDir).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
@@ -905,16 +905,26 @@ describe('published package surface', () => {
     )
 
     expect(windowsJob).not.toContain('- run: yarn check')
-    expect(windowsJob).toContain('workspace: [dsh-plugin-desktop, dsh-plugin-desktop-beta]')
+    expect(ciWorkflow).toContain('branches: [master, dev-lets]')
+    expect(windowsJob).toContain("artifact: 'LETSDSH-Desktop'")
+    expect(windowsJob).toContain("artifact: 'LETSDSH-Desktop-Beta'")
     expect(windowsJob).toContain('- run: yarn workspace ${{ matrix.workspace }} check:win-package')
     expect(windowsJob).toContain('run: yarn workspace ${{ matrix.workspace }} dist:win')
     expect(windowsJob).toContain('run: yarn workspace ${{ matrix.workspace }} dist:win-portable')
     expect(windowsJob).toContain('DSH_PACKAGE_CHECK_ALREADY_RAN: \'1\'')
+    expect(windowsJob).toContain('uses: actions/upload-artifact@v6')
+    expect(windowsJob).toContain('name: ${{ matrix.artifact }}-Windows')
+    expect(windowsJob).toContain('${{ matrix.workspace }}/dist/*-Setup.exe')
+    expect(windowsJob).toContain('${{ matrix.workspace }}/dist/*-Portable.zip')
     expect(macosJob).not.toContain('- run: yarn check')
-    expect(macosJob).toContain('workspace: [dsh-plugin-desktop, dsh-plugin-desktop-beta]')
+    expect(macosJob).toContain("artifact: 'LETSDSH-Desktop'")
+    expect(macosJob).toContain("artifact: 'LETSDSH-Desktop-Beta'")
     expect(macosJob).toContain('- run: yarn workspace ${{ matrix.workspace }} check:mac-package')
     expect(macosJob).toContain('run: yarn workspace ${{ matrix.workspace }} dist:mac-smoke')
     expect(macosJob).toContain('DSH_PACKAGE_CHECK_ALREADY_RAN: \'1\'')
+    expect(macosJob).toContain('uses: actions/upload-artifact@v6')
+    expect(macosJob).toContain('name: ${{ matrix.artifact }}-macOS')
+    expect(macosJob).toContain('${{ matrix.workspace }}/dist/mac-smoke/*.dmg')
     expect(macosJob).not.toContain('- run: yarn dist:mac-smoke')
   })
 
@@ -943,10 +953,10 @@ describe('published package surface', () => {
     expect(ciWorkflow).toContain('Documentation-only change; product build and tests are not required.')
   })
 
-  it('keeps one fixed brand-blue tray source for generated native assets', () => {
+  it('keeps the generated LETSDSH geometric tray mark for native assets', () => {
     const source = readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')
 
-    expect(source.match(/#4D6BFE/gu)).toHaveLength(1)
+    expect(source).toContain('LETSDSH tray mark generated from lets-brand-source.png')
     expect(source).not.toMatch(/<style\b|prefers-color-scheme/iu)
     for (const filename of [
       'tray-iconTemplate.png',
@@ -960,12 +970,12 @@ describe('published package surface', () => {
     }
   })
 
-  it('keeps the iOS Default source icon unmodified', () => {
-    const digest = createHash('sha256')
-      .update(readFileSync(new URL('build/app-icon.png', packageRoot)))
-      .digest('hex')
+  it('derives the temporary application icon from the tracked LETSDSH source art', () => {
+    expect(existsSync(new URL('build/lets-brand-source.png', packageRoot))).toBe(true)
+  })
 
-    expect(digest).toBe('315fbc6e57ff1f34894f21f66fb7f9f26deccf78333c71fad21a6cec64e7de80')
+  it('ships DSH-IM as an exact production dependency', () => {
+    expect(manifest.dependencies?.['@xmanrui/dsh-im']).toBe('4.21.2')
   })
 
   it('generates exact-DPI Windows application and installer icon frames', () => {

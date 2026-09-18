@@ -109,7 +109,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/generate-mac-app-icon.mjs && node scripts/generate-tray-icons.mjs && node scripts/clean.mjs && tsdown && vite build --config vite.native-ui.config.ts && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.client.json --emitDeclarationOnly",
+    "build": "node scripts/prepare-lets-brand-assets.mjs && node scripts/generate-mac-app-icon.mjs && node scripts/generate-tray-icons.mjs && node scripts/clean.mjs && tsdown && vite build --config vite.native-ui.config.ts && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.client.json --emitDeclarationOnly",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.native-ui.json --noEmit && tsc -p tsconfig.tests.json --noEmit && tsc -p tsconfig.tests.client.json --noEmit",
     "test": "vitest run",
     "verify:closure": "node --test scripts/runtime-closure.spec.mjs && node scripts/verify-runtime-closure.mjs",
@@ -284,6 +284,7 @@
     "@deepseek-ai/dsh-workflow": "0.1.6-alpha.2",
     "@deepseek-ai/dsh-workspace": "0.1.6-alpha.2",
     "@deepseek-ai/schemastery": "^3.18.2",
+    "@xmanrui/dsh-im": "4.21.2",
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
     "dshmarket": "1.38.1",
@@ -335,7 +336,7 @@
   },
   "build": {
     "appId": "ai.deepseek.dsh.desktop.beta",
-    "productName": "DSH Desktop Beta",
+    "productName": "LETSDSH Desktop Beta",
     "asar": false,
     "npmRebuild": false,
     "afterPack": "./scripts/verify-packaged-runtime.ts",
@@ -365,7 +366,7 @@
       "!node_modules/fs-ext/build/**"
     ],
     "mac": {
-      "artifactName": "DSH-Desktop-Beta-${version}-${arch}.${ext}",
+      "artifactName": "LETSDSH-Desktop-Beta-${version}-${arch}.${ext}",
       "target": [
         "dir"
       ],
@@ -398,7 +399,7 @@
           ]
         }
       ],
-      "artifactName": "DSH-Desktop-Beta-${version}-${arch}-Portable.${ext}",
+      "artifactName": "LETSDSH-Desktop-Beta-${version}-${arch}-Portable.${ext}",
       "icon": "build/app-icon.png",
       "asar": false
     },
@@ -412,9 +413,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "differentialPackage": false,
-      "shortcutName": "DSH Desktop Beta",
+      "shortcutName": "LETSDSH Desktop Beta",
       "useZip": false,
-      "artifactName": "DSH-Desktop-Beta-${version}-${arch}-Setup.${ext}"
+      "artifactName": "LETSDSH-Desktop-Beta-${version}-${arch}-Setup.${ext}"
     },
     "linux": {
       "target": [

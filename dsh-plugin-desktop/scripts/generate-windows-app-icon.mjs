@@ -27,7 +27,6 @@ export const WINDOWS_APP_ICON_SIZES = Object.freeze([
 
 const SOURCE_CANVAS_SIZE = 1024
 const SMALL_FRAME_MAX_SIZE = 40
-const BRAND_BLUE = '#4D6BFE'
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const sourcePath = join(packageRoot, 'build', 'app-icon.png')
@@ -35,24 +34,25 @@ const markPath = join(packageRoot, 'build', 'tray-icon.svg')
 const outputPath = join(packageRoot, 'build', 'app-icon.ico')
 
 /**
- * Reuse the repository's vector whale for frames where the full shaded artwork
+ * Reuse the repository's tray mark for frames where the full shaded artwork
  * loses recognizable detail. The flat dark-on-light treatment preserves the
- * stable icon's silhouette at native Windows chrome sizes.
+ * LETSDSH geometric silhouette at native Windows chrome sizes.
  * @returns {Promise<Buffer>} Self-contained SVG for small Windows frames.
  */
 async function loadSmallFrameArtwork() {
   const source = await readFile(markPath, 'utf8')
-  if (!source.includes(`fill="${BRAND_BLUE}"`) || /<style\b/iu.test(source)) {
-    throw new Error(`generate-windows-app-icon: tray-icon.svg must use the fixed brand color ${BRAND_BLUE}`)
+  if (/<style\b/iu.test(source)) {
+    throw new Error('generate-windows-app-icon: tray-icon.svg must not contain style rules')
   }
-  const mark = source
-    .replace(/^<svg[^>]*>\s*/u, '')
-    .replace(/<\/svg>\s*$/u, '')
-    .replaceAll(BRAND_BLUE, '#000000')
+  const mark = await sharp(Buffer.from(source))
+    .resize({ width: 40, height: 40, fit: 'contain' })
+    .tint('#000000')
+    .png({ compressionLevel: 9 })
+    .toBuffer()
   return Buffer.from(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50">'
     + '<rect width="50" height="50" rx="11" fill="#FFFFFF"/>'
-    + `<g transform="translate(5 5) scale(0.8)">${mark}</g>`
+    + `<image x="5" y="5" width="40" height="40" href="data:image/png;base64,${mark.toString('base64')}"/>`
     + '</svg>',
   )
 }

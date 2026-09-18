@@ -203,6 +203,7 @@ import {
   DESKTOP_PACKAGE_NAME,
   DESKTOP_PRODUCT_NAME,
   DESKTOP_RELEASE_CHANNEL,
+  DESKTOP_USER_DATA_DIRECTORY_NAME,
   OTHER_DESKTOP_PRODUCT_IDENTITY,
 } from './product-identity.ts'
 import {
@@ -1805,6 +1806,7 @@ async function start(): Promise<void> {
 
 async function run(): Promise<void> {
   app.setName(PRODUCT_NAME)
+  app.setPath('userData', join(app.getPath('appData'), DESKTOP_USER_DATA_DIRECTORY_NAME))
   if (process.argv.includes('--export-diagnostics')) {
     try {
       await app.whenReady()
