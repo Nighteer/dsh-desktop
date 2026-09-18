@@ -176,7 +176,6 @@ export function DesktopFrameTitlebarView({ api, environment, setMode, t, remoteC
     >
       <div className="dshDesktopFrameIdentity">
         <span className="dshDesktopFrameProduct">DSH Desktop</span>
-        <DesktopVersionControl version={environment.version} checkForUpdates={api.checkForUpdates} t={t} />
         <DesktopModeControl
           mode={environment.mode}
           setMode={setMode}

@@ -10,9 +10,36 @@ const buildRoot = join(packageRoot, 'build')
 const sourcePath = join(buildRoot, 'lets-brand-source.png')
 const appIconPath = join(buildRoot, 'app-icon.png')
 const trayIconPath = join(buildRoot, 'tray-icon.svg')
+const clientBrandDataPath = join(packageRoot, 'src', 'client', 'lets-brand-data.ts')
 const TRAY_CANVAS_SIZE = 512
 
 const source = await readFile(sourcePath)
+
+const clientBrandPng = await sharp(source, { failOn: 'warning' })
+  .resize({
+    width: 128,
+    height: 128,
+    fit: 'contain',
+    background: { r: 0, g: 0, b: 0, alpha: 0 },
+    kernel: sharp.kernel.lanczos3,
+  })
+  .ensureAlpha()
+  .png({ compressionLevel: 9, progressive: false, adaptiveFiltering: false, palette: false })
+  .toBuffer()
+const clientBrandModule = [
+  '/** Generated from build/lets-brand-source.png by prepare-lets-brand-assets.mjs. */',
+  `export const LETS_BRAND_IMAGE_DATA_URL = 'data:image/png;base64,${clientBrandPng.toString('base64')}'`,
+  '',
+].join('\n')
+let currentClientBrandModule
+try {
+  currentClientBrandModule = await readFile(clientBrandDataPath, 'utf8')
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error
+}
+if (currentClientBrandModule !== clientBrandModule) {
+  await writeFile(clientBrandDataPath, clientBrandModule)
+}
 
 await sharp(source, { failOn: 'warning' })
   .resize({

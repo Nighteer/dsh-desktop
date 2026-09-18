@@ -255,6 +255,7 @@ export function buildWindowsNsisAb(options: WindowsNsisAbBuildOptions): WindowsN
       isolatedAppBuilderLib,
       'apply',
       '--reverse',
+      '--no-index',
       // The patch target is an untracked package copy, not repository state.
       '--unsafe-paths',
       // Anchor package-relative patch paths at the isolated -C directory.

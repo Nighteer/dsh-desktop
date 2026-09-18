@@ -153,6 +153,7 @@ describe('Windows NSIS A/B packaging', () => {
       '--config.afterAllArtifactBuild=./scripts/verify-nsis-ab-prepackaged.ts',
     )
     expect(calls[3]?.args).toContain('--reverse')
+    expect(calls[3]?.args).toContain('--no-index')
     expect(calls[3]?.args).toContain('--unsafe-paths')
     expect(calls[3]?.args).toContain('--directory=.')
     expect(calls[3]?.args).toContain('--include=./templates/nsis/include/extractAppPackage.nsh')
@@ -264,6 +265,7 @@ describe('Windows NSIS A/B packaging', () => {
       isolatedRoot,
       'apply',
       '--reverse',
+      '--no-index',
       '--unsafe-paths',
       '--directory=.',
       '--include=./templates/nsis/include/extractAppPackage.nsh',

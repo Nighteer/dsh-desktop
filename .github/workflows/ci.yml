@@ -5,6 +5,7 @@ on:
     branches: [master, dev-lets]
   push:
     branches: [master, dev-lets]
+    tags: [v*]
   workflow_dispatch:
 
 permissions:
@@ -224,3 +225,32 @@ jobs:
       - run: corepack enable
       - run: yarn check:layout
       - run: yarn upstream:version
+
+  release:
+    needs: [check, desktop-windows, desktop-macos, upstream-command-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download unsigned Stable Windows packages
+        uses: actions/download-artifact@v7
+        with:
+          name: LETSDSH-Desktop-Windows
+          path: release-artifacts/windows
+      - name: Download unsigned Stable macOS package
+        uses: actions/download-artifact@v7
+        with:
+          name: LETSDSH-Desktop-macOS
+          path: release-artifacts/macos
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            release-artifacts/macos/*.dmg \
+            release-artifacts/windows/*-Setup.exe \
+            release-artifacts/windows/*-Portable.zip

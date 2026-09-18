@@ -999,6 +999,21 @@ describe('published package surface', () => {
     expect(macosJob).not.toContain('- run: yarn dist:mac-smoke')
   })
 
+  it('publishes only the unsigned Stable desktop packages when a version tag passes every gate', () => {
+    expect(ciWorkflow).toContain('tags: [v*]')
+    const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf('  release:'), ciWorkflow.length)
+    expect(releaseJob).toContain("if: startsWith(github.ref, 'refs/tags/v')")
+    expect(releaseJob).toContain('needs: [check, desktop-windows, desktop-macos, upstream-command-windows]')
+    expect(releaseJob).toContain('contents: write')
+    expect(releaseJob).toContain('name: LETSDSH-Desktop-Windows')
+    expect(releaseJob).toContain('name: LETSDSH-Desktop-macOS')
+    expect(releaseJob).not.toContain('LETSDSH-Desktop-Beta')
+    expect(releaseJob).toContain('gh release create "$TAG"')
+    expect(releaseJob).toContain('*.dmg')
+    expect(releaseJob).toContain('*-Setup.exe')
+    expect(releaseJob).toContain('*-Portable.zip')
+  })
+
   it('skips product packaging only for documentation-only changes', () => {
     const classifier = fileURLToPath(new URL('../../scripts/classify-ci-changes.mjs', import.meta.url))
     const classify = (paths: string[]): string => execFileSync(

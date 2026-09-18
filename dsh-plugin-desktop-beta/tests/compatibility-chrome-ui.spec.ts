@@ -1,10 +1,28 @@
 import { readFileSync } from 'node:fs'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DesktopFrameTitlebarView } from '../src/client/DesktopFrameTitlebarView.tsx'
 import { installChromeOverlay } from '../src/native-ui/compatibility-chrome/overlay.ts'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('compatibility HTML chrome', () => {
+  it('keeps the installed version out of the visible titlebar', () => {
+    const markup = renderToStaticMarkup(createElement(DesktopFrameTitlebarView, {
+      environment: { version: '2.0.12', mode: 'compatibility', platform: 'darwin', material: 'off', micaSupported: false },
+      api: {
+        openTerminal: async () => {}, restart: async () => {}, restartToRecovery: async () => {},
+        reloadRenderer: async () => {}, toggleDeveloperTools: async () => {}, checkForUpdates: async () => {},
+      },
+      setMode: async () => {},
+      t: (key: string) => key,
+    }))
+
+    expect(markup).not.toContain('v2.0.12')
+    expect(markup).not.toContain('currentVersion')
+  })
+
   it('uses the same controls and frame rules as extended mode', () => {
     const read = (file: string): string => readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
     expect(read('client/ExtendedTitlebar.tsx')).toContain('<DesktopFrameTitlebarView {...props} />')
