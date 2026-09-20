@@ -84,6 +84,10 @@ describe('published package surface', () => {
       .toBe('yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck')
   })
 
+  it('skips only third-party declaration checking in the Desktop typecheck gate', () => {
+    expect(manifest.scripts?.typecheck).toContain('--skipLibCheck')
+  })
+
   it('runs desktop and community market tests from the root command', () => {
     expect(workspaceManifest.scripts?.test)
       .toBe('yarn workspace dsh-plugin-desktop test && yarn workspace dsh-plugin-desktop-beta test && yarn workspace dsh-community-market test')
@@ -999,19 +1003,10 @@ describe('published package surface', () => {
     expect(macosJob).not.toContain('- run: yarn dist:mac-smoke')
   })
 
-  it('publishes only the unsigned Stable desktop packages when a version tag passes every gate', () => {
-    expect(ciWorkflow).toContain('tags: [v*]')
-    const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf('  release:'), ciWorkflow.length)
-    expect(releaseJob).toContain("if: startsWith(github.ref, 'refs/tags/v')")
-    expect(releaseJob).toContain('needs: [check, desktop-windows, desktop-macos, upstream-command-windows]')
-    expect(releaseJob).toContain('contents: write')
-    expect(releaseJob).toContain('name: LETSDSH-Desktop-Windows')
-    expect(releaseJob).toContain('name: LETSDSH-Desktop-macOS')
-    expect(releaseJob).not.toContain('LETSDSH-Desktop-Beta')
-    expect(releaseJob).toContain('gh release create "$TAG"')
-    expect(releaseJob).toContain('*.dmg')
-    expect(releaseJob).toContain('*-Setup.exe')
-    expect(releaseJob).toContain('*-Portable.zip')
+  it('keeps CI artifact-only and never publishes a GitHub Release', () => {
+    expect(ciWorkflow).not.toContain('tags: [v*]')
+    expect(ciWorkflow).not.toContain('  release:')
+    expect(ciWorkflow).not.toContain('gh release create')
   })
 
   it('skips product packaging only for documentation-only changes', () => {
@@ -1039,10 +1034,10 @@ describe('published package surface', () => {
     expect(ciWorkflow).toContain('Documentation-only change; product build and tests are not required.')
   })
 
-  it('keeps the generated LETSDSH geometric tray mark for native assets', () => {
+  it('keeps the application-icon-derived tray mark for native assets', () => {
     const source = readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')
 
-    expect(source).toContain('LETSDSH tray mark generated from lets-brand-source.png')
+    expect(source).toContain('LETSDSH tray mark generated from app-icon.png')
     expect(source).not.toMatch(/<style\b|prefers-color-scheme/iu)
     for (const filename of [
       'tray-iconTemplate.png',
@@ -1056,16 +1051,17 @@ describe('published package surface', () => {
     }
   })
 
-  it('derives the temporary application icon from the tracked LETSDSH source art', () => {
-    expect(existsSync(new URL('build/lets-brand-source.png', packageRoot))).toBe(true)
+  it('keeps the tracked application icon as the source for generated assets', () => {
+    expect(existsSync(new URL('build/app-icon.png', packageRoot))).toBe(true)
   })
 
-  it('generates a centered macOS icon with a 100-pixel visual inset', async () => {
+  it('generates a macOS icon with a 100-pixel transparent safe area', async () => {
     const source = await sharp(readFileSync(new URL('build/app-icon.png', packageRoot))).metadata()
     const icon = sharp(readFileSync(new URL('build/app-icon-mac.png', packageRoot)))
     const metadata = await icon.metadata()
-    const { info } = await icon
-      .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 0 })
+    const { data, info } = await icon
+      .ensureAlpha()
+      .raw()
       .toBuffer({ resolveWithObject: true })
 
     expect(metadata).toEqual(expect.objectContaining({
@@ -1079,12 +1075,12 @@ describe('published package surface', () => {
       hasAlpha: true,
     }))
     expect(metadata.icc).toEqual(source.icc)
-    expect(info).toEqual(expect.objectContaining({
-      width: 824,
-      height: 824,
-      trimOffsetLeft: -100,
-      trimOffsetTop: -100,
-    }))
+    for (let y = 0; y < info.height; y += 1) {
+      for (let x = 0; x < info.width; x += 1) {
+        if (x >= 100 && x < info.width - 100 && y >= 100 && y < info.height - 100) continue
+        expect(data[(y * info.width + x) * info.channels + 3]).toBe(0)
+      }
+    }
   })
 
   it('keeps Electron out of production dependencies consumed by electron-builder', () => {

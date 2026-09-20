@@ -175,7 +175,7 @@ export function DesktopFrameTitlebarView({ api, environment, setMode, t, remoteC
       data-material={environment.material}
     >
       <div className="dshDesktopFrameIdentity">
-        <span className="dshDesktopFrameProduct">DSH Desktop</span>
+        <span className="dshDesktopFrameProduct">Lets Desktop</span>
         <DesktopModeControl
           mode={environment.mode}
           setMode={setMode}

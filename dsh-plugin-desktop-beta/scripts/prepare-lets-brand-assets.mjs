@@ -1,4 +1,4 @@
-/** Prepare reproducible LETSDSH application and tray icons from the approved source art. */
+/** Derive LETSDSH client and tray assets from the user-supplied application icon. */
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -7,8 +7,7 @@ import sharp from 'sharp'
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const buildRoot = join(packageRoot, 'build')
-const sourcePath = join(buildRoot, 'lets-brand-source.png')
-const appIconPath = join(buildRoot, 'app-icon.png')
+const sourcePath = join(buildRoot, 'app-icon.png')
 const trayIconPath = join(buildRoot, 'tray-icon.svg')
 const clientBrandDataPath = join(packageRoot, 'src', 'client', 'lets-brand-data.ts')
 const TRAY_CANVAS_SIZE = 512
@@ -27,7 +26,7 @@ const clientBrandPng = await sharp(source, { failOn: 'warning' })
   .png({ compressionLevel: 9, progressive: false, adaptiveFiltering: false, palette: false })
   .toBuffer()
 const clientBrandModule = [
-  '/** Generated from build/lets-brand-source.png by prepare-lets-brand-assets.mjs. */',
+  '/** Generated from build/app-icon.png by prepare-lets-brand-assets.mjs. */',
   `export const LETS_BRAND_IMAGE_DATA_URL = 'data:image/png;base64,${clientBrandPng.toString('base64')}'`,
   '',
 ].join('\n')
@@ -40,20 +39,6 @@ try {
 if (currentClientBrandModule !== clientBrandModule) {
   await writeFile(clientBrandDataPath, clientBrandModule)
 }
-
-await sharp(source, { failOn: 'warning' })
-  .resize({
-    width: 1024,
-    height: 1024,
-    fit: 'contain',
-    background: { r: 255, g: 255, b: 255, alpha: 1 },
-    kernel: sharp.kernel.lanczos3,
-  })
-  .ensureAlpha()
-  .toColourspace('rgb16')
-  .withIccProfile('srgb')
-  .png({ compressionLevel: 9, progressive: false, adaptiveFiltering: false, palette: false })
-  .toFile(appIconPath)
 
 const rendered = await sharp(source, { failOn: 'warning' })
   .resize({
@@ -81,7 +66,7 @@ const trayPng = await sharp(pixels, {
   raw: { width: rendered.info.width, height: rendered.info.height, channels: 4 },
 }).png({ compressionLevel: 9, progressive: false, adaptiveFiltering: false, palette: false }).toBuffer()
 const traySvg = [
-  '<!-- LETSDSH tray mark generated from lets-brand-source.png -->',
+  '<!-- LETSDSH tray mark generated from app-icon.png -->',
   `<svg xmlns="http://www.w3.org/2000/svg" width="${TRAY_CANVAS_SIZE}" height="${TRAY_CANVAS_SIZE}" viewBox="0 0 ${TRAY_CANVAS_SIZE} ${TRAY_CANVAS_SIZE}">`,
   `  <image width="${TRAY_CANVAS_SIZE}" height="${TRAY_CANVAS_SIZE}" href="data:image/png;base64,${trayPng.toString('base64')}"/>`,
   '</svg>',

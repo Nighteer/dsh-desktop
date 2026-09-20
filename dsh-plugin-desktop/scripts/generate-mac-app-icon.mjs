@@ -32,15 +32,12 @@ export async function generateMacAppIcon(source = sourcePath, output = outputPat
     metadata.format !== 'png'
     || metadata.width !== MAC_APP_ICON_CANVAS_SIZE
     || metadata.height !== MAC_APP_ICON_CANVAS_SIZE
-    || metadata.space !== 'rgb16'
-    || metadata.depth !== 'ushort'
-    || metadata.bitsPerSample !== 16
     || metadata.channels !== 4
     || metadata.hasAlpha !== true
     || metadata.icc === undefined
   ) {
     throw new Error(
-      `generate-mac-app-icon: source must be a ${MAC_APP_ICON_CANVAS_SIZE}x${MAC_APP_ICON_CANVAS_SIZE} RGBA16 PNG with an ICC profile`,
+      `generate-mac-app-icon: source must be a ${MAC_APP_ICON_CANVAS_SIZE}x${MAC_APP_ICON_CANVAS_SIZE} PNG with alpha and an ICC profile`,
     )
   }
 
