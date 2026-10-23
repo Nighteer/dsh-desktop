@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -8,6 +9,20 @@ import {
 } from '../scripts/mac-universal.ts'
 
 describe('universal macOS native runtime preparation', () => {
+  it('preserves thin Office interpreters and hidden NumPy libraries in both slices', () => {
+    const require = createRequire(import.meta.url)
+    const universalRequire = createRequire(require.resolve('@electron/universal'))
+    const { minimatch } = universalRequire('minimatch')
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      build: { mac: { x64ArchFiles: string } }
+    }
+    const matches = (path: string): boolean => minimatch(path, manifest.build.mac.x64ArchFiles, { matchBase: true })
+    const root = 'Contents/Resources/official-office/snapshot/primary-runtime/dependencies/python'
+    expect(matches(`${root}/bin/python3.12`)).toBe(true)
+    expect(matches(`${root}/lib/python3.12/site-packages/numpy/.dylibs/libscipy_openblas64_.dylib`)).toBe(true)
+    expect(matches('Contents/Resources/unrelated/native.dylib')).toBe(false)
+  })
+
   it.skipIf(process.platform !== 'darwin')('tracks the installed Sharp and libvips files for both CPUs', () => {
     const desktopRoot = fileURLToPath(new URL('..', import.meta.url))
     for (const entry of MACOS_UNIVERSAL_NATIVE_ENTRIES.filter(entry => entry.path.startsWith('node_modules/@img/'))) {
