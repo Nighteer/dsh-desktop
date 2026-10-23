@@ -24,13 +24,13 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
         const tree = { ctx: { baseUrl }, entries: () => names.map(name => ({
           options: { name }, fiber: { state: 2 }, parent: { tree }
         })) };
-        apply({ baseUrl, get: () => undefined, loader: tree, deepseekLlmApiExtensions: {
+        apply({ baseUrl, get: () => undefined, logger: { warn() {} }, loader: tree, deepseekLlmApiExtensions: {
           register: (key, value) => { assert.equal(key, 'dsh_plugin_packages'); provider = value; }
         } }, {});
         return (await provider.prepare({})).value.packages;
       };
       // A standalone Profile has no physical copy of the Desktop package.
-      await assert.rejects(() => collect([desktop.name]), /cannot resolve active package/);
+      assert.deepEqual(await collect([desktop.name]), []);
       release = installProfilePackageResolver(baseUrl);
       assert.deepEqual(await collect([
         desktop.name, desktop.name + '/terminal', desktop.name + '/pnpm',
@@ -44,13 +44,13 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
       }));
       writeFileSync(join(plugin, 'index.js'), 'throw new Error("inventory evaluated plugin")');
       assert.deepEqual(await collect(['private-manifest-plugin']), [{ name: 'private-manifest-plugin', version: '1.2.3' }]);
-      await assert.rejects(() => collect(['inventory-nonexistent-package']), /cannot resolve.*package/);
+      assert.deepEqual(await collect(['inventory-nonexistent-package']), []);
       writeFileSync(join(plugin, 'package.json'), JSON.stringify({ name: 'private-manifest-plugin', exports: './index.js' }));
-      await assert.rejects(() => collect(['private-manifest-plugin']), /non-empty name and version/);
+      assert.deepEqual(await collect(['private-manifest-plugin']), [{ name: 'private-manifest-plugin' }]);
       release(); release = undefined;
-      await assert.rejects(() => collect([desktop.name]), /cannot resolve active package/);
+      assert.deepEqual(await collect([desktop.name]), []);
       console.log('request inventory passed');
-    } finally { release?.(); rmSync(root, { recursive: true, force: true }); }
+    } finally { release?.(); if (process.env.DSH_KEEP_TEST_ARTIFACTS !== '1') rmSync(root, { recursive: true, force: true }); }
   `
   const output = execFileSync(process.execPath, [
     '--input-type=module', '-e', script,

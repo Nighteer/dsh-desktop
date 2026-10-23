@@ -12,6 +12,7 @@ export interface OfficialOfficeOptions {
   /** Injectable only for tests and packaged resource discovery. */
   resourcesPath?: string
   packageDirectory?: string
+  arch?: NodeJS.Architecture
 }
 export interface OfficialOfficeState {enabled:boolean;source?:string}
 
@@ -25,7 +26,8 @@ export function locateOfficialOffice(options:OfficialOfficeOptions={}):string|un
   const packageDirectory=options.packageDirectory??fileURLToPath(new URL('../',import.meta.url))
   const roots=[...(resources?[join(resources,'official-office')]:[]),join(packageDirectory,'build/official-office')]
   for(const root of roots){
-    const pointer=join(root,'current.json')
+    const architecturePointer=join(root,`current-${options.arch??process.arch}.json`)
+    const pointer=existsSync(architecturePointer)?architecturePointer:join(root,'current.json')
     if(!existsSync(pointer))continue
     const value=JSON.parse(readFileSync(pointer,'utf8')) as {schema?:unknown;directory?:unknown;coreVersion?:unknown}
     if(value.schema!==1||typeof value.directory!=='string'||!/^[a-f0-9]{64}$/u.test(value.directory)||value.coreVersion!=='0.2.1-rc.2')throw Error('Invalid official Office snapshot pointer')

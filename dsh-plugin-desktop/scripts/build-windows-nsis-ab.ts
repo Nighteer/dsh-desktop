@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withoutWindowsSigningSecrets } from './package-win.ts'
@@ -252,14 +253,15 @@ export function buildWindowsNsisAb(options: WindowsNsisAbBuildOptions): WindowsN
     options.gitExecutable,
     [
       '-C',
-      isolatedAppBuilderLib,
+      tmpdir(),
       'apply',
       '--reverse',
       '--no-index',
       // The patch target is an untracked package copy, not repository state.
       '--unsafe-paths',
       // Anchor package-relative patch paths at the isolated -C directory.
-      '--include=templates/nsis/include/extractAppPackage.nsh',
+      `--directory=${isolatedAppBuilderLib.replaceAll('\\', '/')}`,
+      `--include=${isolatedAppBuilderLib.replaceAll('\\', '/')}/templates/nsis/include/extractAppPackage.nsh`,
       options.appBuilderPatch,
     ],
     options.workspaceRoot,

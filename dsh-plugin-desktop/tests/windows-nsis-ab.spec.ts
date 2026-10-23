@@ -33,7 +33,7 @@ const require = createRequire(import.meta.url)
 const asarCli = require.resolve('@electron/asar/bin/asar.js')
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  for (const root of roots.splice(0)) if (process.env.DSH_KEEP_TEST_ARTIFACTS !== '1') rmSync(root, { recursive: true, force: true })
 })
 
 function pe(): Buffer {
@@ -96,7 +96,7 @@ function fixture(mutateStaged = false): { options: WindowsNsisAbBuildOptions, ca
     run: (command, args, cwd, env) => {
       calls.push({ command, args: [...args], cwd, env: { ...env } })
       if (command === 'git.exe') {
-        const isolatedRoot = args[1] as string
+        const isolatedRoot = args.find(value => value.startsWith('--directory='))!.slice('--directory='.length)
         writeFileSync(
           join(isolatedRoot, 'templates', 'nsis', 'include', 'extractAppPackage.nsh'),
           '!macro extractUsing7za FILE\n  CreateDirectory "$PLUGINSDIR\\7z-out"\n'
@@ -155,8 +155,8 @@ describe('Windows NSIS A/B packaging', () => {
     expect(calls[3]?.args).toContain('--reverse')
     expect(calls[3]?.args).toContain('--no-index')
     expect(calls[3]?.args).toContain('--unsafe-paths')
-    expect(calls[3]?.args).toContain('--directory=.')
-    expect(calls[3]?.args).toContain('--include=templates/nsis/include/extractAppPackage.nsh')
+    expect(calls[3]?.args).toContain(`--directory=${join(options.outputRoot, '.staged-builder', 'node_modules', 'app-builder-lib').replaceAll('\\', '/')}`)
+    expect(calls[3]?.args).toContain(`--include=${join(options.outputRoot, '.staged-builder', 'node_modules', 'app-builder-lib').replaceAll('\\', '/')}/templates/nsis/include/extractAppPackage.nsh`)
     expect(calls[3]?.env.GIT_CEILING_DIRECTORIES)
       .toBe(join(options.outputRoot, '.staged-builder', 'node_modules'))
     expect(calls[4]?.args).toContain(`--prepackaged=${join(options.outputRoot, 'prepackaged', 'win-unpacked')}`)
@@ -262,12 +262,13 @@ describe('Windows NSIS A/B packaging', () => {
 
     execFileSync('git', [
       '-C',
-      isolatedRoot,
+      tmpdir(),
       'apply',
       '--reverse',
       '--no-index',
       '--unsafe-paths',
-      '--include=./templates/nsis/include/extractAppPackage.nsh',
+      `--directory=${isolatedRoot.replaceAll('\\', '/')}`,
+      `--include=${isolatedRoot.replaceAll('\\', '/')}/templates/nsis/include/extractAppPackage.nsh`,
       fileURLToPath(new URL('../../patches/app-builder-lib@26.15.7.patch', import.meta.url)),
     ], {
       env: {

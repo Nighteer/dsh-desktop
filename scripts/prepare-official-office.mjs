@@ -9,8 +9,20 @@ import {fileURLToPath,pathToFileURL} from 'node:url'
 const root=resolve(import.meta.dirname,'..')
 const edition=process.argv.includes('--stable')?'dsh-plugin-desktop':'dsh-plugin-desktop-beta'
 const publishBoth=process.argv.includes('--both')
+if(process.argv.includes('--universal')){
+  if(process.platform!=='darwin')throw Error('Universal Office preparation requires macOS')
+  for(const arch of ['x64','arm64']){
+    const args=[fileURLToPath(import.meta.url),`--target=mac-${arch}`,'--architecture-pointers',...(edition==='dsh-plugin-desktop'?['--stable']:[])]
+    const result=spawnSync(process.execPath,args,{stdio:'inherit',env:process.env,windowsHide:true})
+    if(result.status!==0)throw Error(`Official Office ${arch} preparation failed`)
+  }
+  process.exit(0)
+}
 const desktopRequire=createRequire(join(root,edition,'package.json'))
-const target=process.platform==='win32'?'win-x64':`${process.platform==='darwin'?'mac':'linux'}-${process.arch}`
+const target=process.argv.find(value=>value.startsWith('--target='))?.slice('--target='.length)
+  ??(process.platform==='win32'?'win-x64':`${process.platform==='darwin'?'mac':'linux'}-${process.arch}`)
+if(!target.startsWith(process.platform==='darwin'?'mac-':process.platform==='win32'?'win-':'linux-'))throw Error('Office target must match the build host platform')
+const pointerName=process.argv.includes('--architecture-pointers')?`current-${target.endsWith('-x64')?'x64':'arm64'}.json`:'current.json'
 if(process.platform==='win32'&&process.arch!=='x64')throw Error('Official Windows Office payload currently supports x64 only')
 const lockPath=join(root,'deepseek-harness/scripts/primary-runtime/lock.json')
 const lock=JSON.parse(readFileSync(lockPath,'utf8'))
@@ -18,14 +30,14 @@ if(!lock.targets[target])throw Error(`Unsupported Office target: ${target}`)
 const version=JSON.parse(readFileSync(join(root,edition,'package.json'),'utf8')).version
 const inputs=createHash('sha256').update(readFileSync(lockPath)).update(version).digest('hex')
 const destination=join(root,edition,'build/official-office')
-const currentPath=join(destination,'current.json')
+const currentPath=join(destination,pointerName)
 if(existsSync(currentPath)){
   const current=JSON.parse(readFileSync(currentPath,'utf8'))
   if(current.inputs!==inputs)throw Error('Existing official Office snapshot differs; preserve it and prepare an explicitly reviewed update')
   if(!/^[a-f0-9]{64}$/u.test(current.directory)||!existsSync(join(destination,current.directory,'primary-runtime/runtime.json')))throw Error('Existing Office pointer is invalid')
   if(publishBoth){
     for(const name of ['dsh-plugin-desktop-beta','dsh-plugin-desktop']){
-      const pointer=join(root,name,'build/official-office/current.json')
+      const pointer=join(root,name,'build/official-office',pointerName)
       if(!existsSync(pointer))throw Error(`Missing ${name} Office snapshot; preserve the existing snapshot and complete preparation explicitly`)
       const peer=JSON.parse(readFileSync(pointer,'utf8'))
       if(peer.directory!==current.directory||peer.coreVersion!==current.coreVersion)throw Error('Desktop editions have different official Office snapshots')
@@ -117,12 +129,12 @@ const manifest=JSON.parse(readFileSync(join(output,'primary-runtime/runtime.json
 if(!/^[a-f0-9]{64}$/u.test(manifest.payloadDigest))throw Error('Missing official payload digest')
 for(const name of publishBoth?['dsh-plugin-desktop-beta','dsh-plugin-desktop']:[edition]){
   const directory=join(root,name,'build/official-office')
-  if(existsSync(join(directory,'current.json')))throw Error(`Refusing to replace existing Office snapshot: ${directory}`)
+  if(existsSync(join(directory,pointerName)))throw Error(`Refusing to replace existing Office snapshot: ${directory}`)
   mkdirSync(directory,{recursive:true})
   const snapshot=join(directory,manifest.payloadDigest)
   if(existsSync(snapshot))throw Error(`Refusing to overwrite existing snapshot: ${snapshot}`)
   cpSync(output,snapshot,{recursive:true,dereference:true,force:false,errorOnExist:true})
-  writeFileSync(join(directory,'current.json'),JSON.stringify({schema:1,directory:manifest.payloadDigest,inputs,coreVersion:'0.2.1-rc.2'},null,2))
+  writeFileSync(join(directory,pointerName),JSON.stringify({schema:1,directory:manifest.payloadDigest,inputs,coreVersion:'0.2.1-rc.2'},null,2))
   console.log(`Official Office ready: ${directory}`)
 }
 console.log(`Preparation evidence and verified downloads retained: ${work}`)

@@ -51,7 +51,7 @@ const temporaryProfiles: string[] = []
 
 afterEach(() => {
   globalThis.fetch = originalFetch
-  for (const profile of temporaryProfiles.splice(0)) rmSync(profile, { recursive: true, force: true })
+  for (const profile of temporaryProfiles.splice(0)) if (process.env.DSH_KEEP_TEST_ARTIFACTS !== '1') rmSync(profile, { recursive: true, force: true })
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
@@ -87,14 +87,14 @@ function writeProfileManifest(profileDir: string, manifest: object): void {
   writeFileSync(join(profileDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
-function installMarketFixture(profileDir: string, options: { validPatch: boolean }): void {
+function installMarketFixture(profileDir: string, options: { validPatch: boolean; version?: string }): void {
   const packageDir = join(profileDir, 'node_modules', 'dshmarket')
   mkdirSync(join(packageDir, 'lib'), { recursive: true })
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({
     name: 'dshmarket',
-    version: '1.67.0',
+    version: options.version ?? '1.67.0',
     main: './lib/index.js',
-    dsh: { bundle: { patch: './cordis.patch.yml' } },
+    dsh: { bundle: { patch: options.validPatch ? './cordis.patch.yml' : './missing.cordis.patch.yml' } },
   }))
   writeFileSync(join(packageDir, 'lib', 'index.js'), 'export default {}\n')
   if (options.validPatch) writeFileSync(join(packageDir, 'cordis.patch.yml'), '[]\n')
@@ -291,7 +291,7 @@ describe('dsh-market Desktop install compatibility', () => {
     await runtime.dispose()
   })
 
-  it('does not reject a host-provided market update for a pre-existing missing bundle', async () => {
+  it('rejects an update when a pre-existing missing bundle prevents boot', async () => {
     globalThis.fetch = vi.fn(async () => new Response(
       JSON.stringify({ version: '1.67.0' }),
       { status: 200, headers: { 'content-type': 'application/json' } },
@@ -327,12 +327,12 @@ describe('dsh-market Desktop install compatibility', () => {
     const result = await invokeUpdate(route)
     dispose()
 
-    expect(result.status).toBe(200)
-    expect(result.body).toMatchObject({ ok: true })
+    expect(result.status, JSON.stringify(result.body)).toBe(502)
+    expect(result.body).toMatchObject({ ok: false, orphanBundles: ['orphan'] })
     expect(runPlugin).toHaveBeenCalledOnce()
     expect(JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'))).toMatchObject({
-      dependencies: { dshmarket: '^1.67.0' },
-      dsh: { profile: { bundles: ['orphan', 'dshmarket'] } },
+      dependencies: { dshmarket: '1.66.44' },
+      dsh: { profile: { bundles: ['orphan'] } },
     })
   })
 
@@ -351,8 +351,11 @@ describe('dsh-market Desktop install compatibility', () => {
       dsh: { profile: { bundles: [] as string[] } },
     }
     writeProfileManifest(profileDir, initialManifest)
+    installMarketFixture(profileDir, { validPatch: true, version: '1.66.44' })
     const runPlugin = vi.fn(async (_profile: string, args: string[]): Promise<RouteRuntimeResult> => {
-      if (args[0] === 'add') {
+      if (args.includes('dshmarket@1.66.44')) {
+        installMarketFixture(profileDir, { validPatch: true, version: '1.66.44' })
+      } else if (args[0] === 'add') {
         writeProfileManifest(profileDir, {
           ...initialManifest,
           dependencies: { ...initialManifest.dependencies, dshmarket: '^1.67.0' },
@@ -374,9 +377,9 @@ describe('dsh-market Desktop install compatibility', () => {
 
     expect(result.status).toBe(502)
     expect(result.body).toMatchObject({ ok: false })
-    expect(String(result.body.error)).toContain('declared patch ./cordis.patch.yml is missing')
-    expect(runPlugin).toHaveBeenCalledTimes(2)
-    expect(runPlugin.mock.calls[1]?.[1]).toEqual(['--no-frozen-lockfile', '--config.minimumReleaseAge=0', 'install'])
+    expect(String(result.body.error)).toContain('declared patch ./missing.cordis.patch.yml is missing')
+    expect(runPlugin, JSON.stringify(result.body)).toHaveBeenCalledTimes(2)
+    expect(runPlugin.mock.calls[1]?.[1]).toEqual(['add', '--force', '--config.minimum-release-age=0', 'dshmarket@1.66.44'])
     expect(JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'))).toEqual(initialManifest)
   })
 })

@@ -147,6 +147,8 @@ jobs:
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
       - run: yarn workspace ${{ matrix.workspace }} check:win-package
+      - name: Prepare official Windows Office runtime
+        run: yarn office:prepare:stable
       - name: Enable enterprise login in Windows packages
         run: node scripts/enterprise-ci-package.mjs prepare ${{ matrix.workspace }}
       - name: Build enterprise Windows installer
@@ -207,6 +209,8 @@ jobs:
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
       - run: yarn workspace ${{ matrix.workspace }} check:mac-package
+      - name: Prepare official Office runtimes for both Mac architectures
+        run: yarn office:prepare:mac
       - name: Enable enterprise login in macOS packages
         run: node scripts/enterprise-ci-package.mjs prepare ${{ matrix.workspace }}
       - name: Build enterprise macOS smoke artifact

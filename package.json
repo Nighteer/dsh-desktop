@@ -1904,7 +1904,9 @@
     "dist:win-portable:beta": "yarn aa:prepare-release && yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop-beta dist:win-portable",
     "aa:check": "node scripts/prepare-agents-anywhere-release.mjs --check",
     "aa:prepare-release": "node scripts/prepare-agents-anywhere-release.mjs",
-    "check:boundaries": "node scripts/check-boundaries.mjs"
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "office:prepare:stable": "node scripts/prepare-official-office.mjs --stable",
+    "office:prepare:mac": "node scripts/prepare-official-office.mjs --stable --universal"
   },
   "dependencies": {
     "dsh-enterprise-contracts": "file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz"
