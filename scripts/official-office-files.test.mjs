@@ -20,5 +20,5 @@ test('published Office snapshots preserve relative Python aliases after relocati
     assert.equal(readlinkSync(path),'python3.12')
     assert.equal(readFileSync(path,'utf8'),'interpreter fixture')
   }
-  assert.throws(()=>copyOfficialOfficeSnapshot(source,destination),{code:'ERR_FS_CP_EEXIST'})
+  assert.throws(()=>copyOfficialOfficeSnapshot(source,destination),/Refusing to replace/u)
 })
