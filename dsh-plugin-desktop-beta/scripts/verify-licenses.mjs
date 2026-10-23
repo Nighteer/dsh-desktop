@@ -31,6 +31,13 @@ const ALLOWED_LICENSES = new Set([
   'CC0-1.0',
   'Zlib',
   'Python-2.0',
+  'MIT-0',
+  'BlueOak-1.0.0',
+  // Alternate Apache spelling and explicit permissive choices/conjunctions.
+  'Apache 2.0',
+  '(MIT OR CC0-1.0)',
+  '(MIT OR GPL-3.0-or-later)',
+  '(MIT AND Zlib)',
 ])
 
 /**
@@ -104,7 +111,7 @@ for (let index = 0; index < queue.length; index += 1) {
     } else if (license !== undefined && !ALLOWED_LICENSES.has(license) && !NOTICE_LICENSES.has(license)) {
       failures.push(`${current.name}: license ${JSON.stringify(license)} is not on the redistribution allowlist`)
     }
-    manifests.push({ name: current.name, version: manifest.version, license: license ?? 'SEE LICENSE FILE' })
+    manifests.push({ name: manifest.name ?? current.name, version: manifest.version, license: license ?? 'SEE LICENSE FILE' })
   }
 
   const requireFrom = createRequire(current.manifestPath)

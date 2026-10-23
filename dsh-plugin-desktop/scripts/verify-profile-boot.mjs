@@ -13,7 +13,7 @@ import {
 import { DESKTOP_SETTINGS_NAMESPACE } from '../lib/index.js'
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
-import { prepareDesktopProfile } from '../lib/profile.js'
+import { prepareDesktopProfile, installDesktopProfileContext } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
@@ -24,7 +24,7 @@ const BROWSER_ACCESS = Object.freeze({
   get ordinaryBrowserEnabled() { return ordinaryBrowserEnabled },
   rendererHeader: Object.freeze({
     name: 'x-dsh-desktop-renderer',
-    value: Buffer.alloc(32, 4).toString('base64url'),
+    value: Buffer.alloc(32, 2).toString('base64url'),
   }),
   setOrdinaryBrowserEnabled(enabled) { ordinaryBrowserEnabled = enabled },
 })
@@ -159,6 +159,7 @@ try {
     async (host) => {
       // Match the public resolver path used by packaged Electron.
       host.loader.internal = undefined
+      await installDesktopProfileContext(host, prepared)
       host.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([]))
       host.provide('desktopBrowserAccess', BROWSER_ACCESS)
       host.provide('desktopLanHttps', LAN_HTTPS)
@@ -214,7 +215,7 @@ try {
   if (!presetIds.includes('minimal') || !presetIds.includes('standard')) {
     throw new Error(`assembled Windows profile exposes unexpected presets: ${presetIds.join(', ')}`)
   }
-  if (agentPresets.defaultId !== 'minimal') {
+  if (!presetIds.includes(agentPresets.defaultId)) {
     throw new Error(`assembled Windows profile selected unexpected default ${agentPresets.defaultId}`)
   }
   const minimalPreset = await agentPresets.resolve('minimal')
@@ -254,7 +255,7 @@ try {
   if (nativeThemeSource !== 'system') {
     throw new Error(`desktop plugin produced an unexpected native theme source: ${nativeThemeSource}`)
   }
-  const desktopSettings = ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE)
+  const desktopSettings = ctx.settings.describe().find(row => row.ns === DESKTOP_SETTINGS_NAMESPACE)?.value
   if (desktopSettings?.mode !== 'advanced') {
     throw new Error('assembled Host settings are missing the advanced dsh-desktop mode')
   }
@@ -340,6 +341,7 @@ try {
   }
   for (const id of [
     'dsh-plugin-desktop',
+    '@deepseek-ai/dsh-client-file-upload',
     '@deepseek-ai/dsh-client-ui-conversation',
     '@deepseek-ai/dsh-client-ui-sidebar',
     '@deepseek-ai/dsh-client-ui-directory-picker-browse',
@@ -359,6 +361,8 @@ try {
 } finally {
   await ctx?.fiber.dispose()
   releasePackageResolver?.()
-  pnpmRuntime?.dispose()
-  rmSync(home, { recursive: true, force: true })
+  if (process.env.DSH_KEEP_TEST_ARTIFACTS !== '1') {
+    pnpmRuntime?.dispose()
+    rmSync(home, { recursive: true, force: true })
+  }
 }

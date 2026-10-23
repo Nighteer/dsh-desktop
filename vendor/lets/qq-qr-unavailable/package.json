@@ -1,0 +1,9 @@
+{
+  "name": "@lets/qq-qr-unavailable",
+  "version": "1.0.0",
+  "description": "LETS-owned compatibility adapter: QQ QR onboarding is unavailable; no Tencent connector code is included",
+  "type": "module",
+  "main": "index.js",
+  "exports": { ".": "./index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}

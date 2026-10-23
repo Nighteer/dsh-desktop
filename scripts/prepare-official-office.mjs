@@ -65,8 +65,7 @@ if(!existsSync(join(tools,'package.json'))){
   writeFileSync(join(tools,'yarn.lock'),'')
   writeFileSync(join(tools,'.yarnrc.yml'),'nodeLinker: node-modules\nenableScripts: false\nenableGlobalCache: false\ncacheFolder: ./cache\nglobalFolder: ./global\n')
 }
-const yarn=process.env.npm_execpath&&/yarn[^\\/]*\.(?:js|cjs)$/u.test(process.env.npm_execpath)
-  ?process.env.npm_execpath:join(root,'.corepack-cache/v1/yarn/4.18.0/yarn.js')
+const yarn=join(root,'.yarn/releases/yarn-4.18.0.cjs')
 if(!existsSync(yarn))throw Error('Run through the repository Corepack Yarn 4.18.0 release')
 const yarnVersion=spawnSync(process.execPath,[yarn,'--version'],{encoding:'utf8',windowsHide:true})
 if(yarnVersion.status!==0||yarnVersion.stdout.trim()!=='4.18.0')throw Error('Official Office preparation requires the root Yarn 4.18.0 release')

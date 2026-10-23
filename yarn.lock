@@ -8510,12 +8510,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tencent-connect/qqbot-connector@npm:1.2.0":
-  version: 1.2.0
-  resolution: "@tencent-connect/qqbot-connector@npm:1.2.0"
-  dependencies:
-    qrcode-terminal: "npm:^0.12"
-  checksum: 10c0/f1f991983eff75301ce6a269b30a848397a2d76e7cdb11840a36c2a53634caa1648b9f240ef87751aa295c5570652e4df614bbc2052ecc83122b99b4da3b7c96
+"@tencent-connect/qqbot-connector@file:vendor/lets/lets-qq-qr-unavailable-1.0.0.tgz::locator=lets-desktop%40workspace%3A.":
+  version: 1.0.0
+  resolution: "@tencent-connect/qqbot-connector@file:vendor/lets/lets-qq-qr-unavailable-1.0.0.tgz#vendor/lets/lets-qq-qr-unavailable-1.0.0.tgz::hash=28ef33&locator=lets-desktop%40workspace%3A."
+  checksum: 10c0/edfcb8af3bd530f7a224abc38f59cf71c8deb1bad3714e621f4b4749b387a9831947a0beae217427ac7abe353ae7b770cb26fbac139a0bcadb766acc9f535b01
   languageName: node
   linkType: hard
 
@@ -15058,15 +15056,6 @@ __metadata:
   version: 1.2.0
   resolution: "pvutils@npm:1.2.0"
   checksum: 10c0/1206766f0b9947fd44a629e2ed7945fb5d1d8ee0f31f032ec58d60cec2165b0b3afb11bf3727215348bf19132ca34986302680b5930d45b0a0d23745fd54224b
-  languageName: node
-  linkType: hard
-
-"qrcode-terminal@npm:^0.12":
-  version: 0.12.0
-  resolution: "qrcode-terminal@npm:0.12.0"
-  bin:
-    qrcode-terminal: ./bin/qrcode-terminal.js
-  checksum: 10c0/1d8996a743d6c95e22056bd45fe958c306213adc97d7ef8cf1e03bc1aeeb6f27180a747ec3d761141921351eb1e3ca688f7b673ab54cdae9fa358dffaa49563c
   languageName: node
   linkType: hard
 
