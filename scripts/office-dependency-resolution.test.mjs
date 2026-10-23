@@ -4,7 +4,16 @@ import {mkdirSync,mkdtempSync,writeFileSync} from 'node:fs'
 import {registerHooks} from 'node:module'
 import {join,resolve} from 'node:path'
 import {pathToFileURL} from 'node:url'
-import {officeDependencyResolver} from './office-dependency-resolution.mjs'
+import {officeDependencyResolver,lockedOfficePnpmArchive} from './office-dependency-resolution.mjs'
+
+test('Office pnpm comes from an exact version and integrity in the upstream lock',()=>{
+  const integrity='sha512-'+Buffer.alloc(64,7).toString('base64')
+  assert.deepEqual(lockedOfficePnpmArchive({devDependencies:{pnpm:'11.28.5'}},{packages:{'pnpm@11.28.5':{resolution:{integrity}}}}),{
+    name:'pnpm',version:'11.28.5',url:'https://registry.npmjs.org/pnpm/-/pnpm-11.28.5.tgz',integrity,
+  })
+  assert.throws(()=>lockedOfficePnpmArchive({devDependencies:{pnpm:'^11'}},{packages:{}}),/pinned upstream/u)
+  assert.throws(()=>lockedOfficePnpmArchive({devDependencies:{pnpm:'11.28.5'}},{packages:{}}),/pinned upstream/u)
+})
 
 test('Office preparation resolves tar through its ESM export without changing upstream',async()=>{
   const artifacts=resolve(import.meta.dirname,'../.artifacts')

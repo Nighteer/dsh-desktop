@@ -1030,12 +1030,18 @@ describe('published package surface', () => {
       hasAlpha: true,
     }))
     expect(metadata.icc).toEqual(source.icc)
+    let opaqueBorderPixels = 0
+    const firstOpaquePixels: { x: number; y: number }[] = []
     for (let y = 0; y < info.height; y += 1) {
       for (let x = 0; x < info.width; x += 1) {
         if (x >= 100 && x < info.width - 100 && y >= 100 && y < info.height - 100) continue
-        expect(data[(y * info.width + x) * info.channels + 3]).toBe(0)
+        if (data[(y * info.width + x) * info.channels + 3] !== 0) {
+          opaqueBorderPixels += 1
+          if (firstOpaquePixels.length < 12) firstOpaquePixels.push({ x, y })
+        }
       }
     }
+    expect(opaqueBorderPixels, JSON.stringify(firstOpaquePixels)).toBe(0)
   })
 
   it('keeps Electron out of production dependencies consumed by electron-builder', () => {

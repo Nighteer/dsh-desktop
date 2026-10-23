@@ -5,7 +5,7 @@ import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,renameSync,writeFil
 import {createRequire,registerHooks} from 'node:module'
 import {dirname,join,resolve,sep} from 'node:path'
 import {fileURLToPath,pathToFileURL} from 'node:url'
-import {officeDependencyResolver} from './office-dependency-resolution.mjs'
+import {officeDependencyResolver,lockedOfficePnpmArchive} from './office-dependency-resolution.mjs'
 
 const root=resolve(import.meta.dirname,'..')
 const edition=process.argv.includes('--stable')?'dsh-plugin-desktop':'dsh-plugin-desktop-beta'
@@ -27,6 +27,10 @@ const pointerName=process.argv.includes('--architecture-pointers')?`current-${ta
 if(process.platform==='win32'&&process.arch!=='x64')throw Error('Official Windows Office payload currently supports x64 only')
 const lockPath=join(root,'deepseek-harness/scripts/primary-runtime/lock.json')
 const lock=JSON.parse(readFileSync(lockPath,'utf8'))
+const pnpmArchive=lockedOfficePnpmArchive(
+  JSON.parse(readFileSync(join(root,'deepseek-harness/package.json'),'utf8')),
+  desktopRequire('yaml').parse(readFileSync(join(root,'deepseek-harness/pnpm-lock.yaml'),'utf8')),
+)
 if(!lock.targets[target])throw Error(`Unsupported Office target: ${target}`)
 const version=JSON.parse(readFileSync(join(root,edition,'package.json'),'utf8')).version
 const inputs=createHash('sha256').update(readFileSync(lockPath)).update(version).digest('hex')
@@ -81,12 +85,14 @@ const downloads=join(work,'downloads');mkdirSync(downloads,{recursive:true})
 const artifact=lock.targets[target]
 const pythonFile=`cpython-${lock.pythonVersion}+${lock.pythonRelease}-${artifact.pythonTarget}-install_only_stripped.tar.gz`
 const archives=[
+  {url:pnpmArchive.url,sha256:Buffer.from(pnpmArchive.integrity.slice(7),'base64').toString('hex'),algorithm:'sha512'},
   {url:`https://nodejs.org/dist/v${lock.nodeVersion}/node-v${lock.nodeVersion}-${artifact.nodeArchive}`,sha256:artifact.nodeSha256},
   {url:`https://github.com/astral-sh/python-build-standalone/releases/download/${lock.pythonRelease}/${encodeURIComponent(pythonFile)}`,sha256:artifact.pythonSha256},
   ...artifact.wheels,...lock.wheels,
 ]
 for(const archive of archives){
-  if(!archive.url.startsWith('https://')||!/^[a-f0-9]{64}$/u.test(archive.sha256))throw Error('Invalid pinned Office download')
+  const algorithm=archive.algorithm??'sha256'
+  if(!archive.url.startsWith('https://')||!(algorithm==='sha512'?/^[a-f0-9]{128}$/u:/^[a-f0-9]{64}$/u).test(archive.sha256))throw Error('Invalid pinned Office download')
   const cache=join(downloads,archive.sha256)
   if(existsSync(cache)){
     if(createHash('sha256').update(readFileSync(cache)).digest('hex')!==archive.sha256)throw Error('Existing Office cache checksum mismatch; preserving it')
@@ -97,7 +103,7 @@ for(const archive of archives){
   const proxy=(process.env.HTTPS_PROXY||process.env.https_proxy)?['--noproxy','']:[]
   const fetched=spawnSync(process.platform==='win32'?'curl.exe':'curl',['--fail','--location','--silent','--show-error','--retry','2','--retry-all-errors','--connect-timeout','20','--max-time','180',...proxy,'--output',download,archive.url],{windowsHide:true,stdio:'inherit'})
   if(fetched.status!==0)throw Error('Official Office archive download failed; partial bytes are preserved')
-  if(createHash('sha256').update(readFileSync(download)).digest('hex')!==archive.sha256)throw Error('Official Office archive checksum mismatch')
+  if(createHash(algorithm).update(readFileSync(download)).digest('hex')!==archive.sha256)throw Error('Official Office archive checksum mismatch')
   renameSync(download,cache)
 }
 const upstream=join(root,'deepseek-harness/scripts/primary-runtime')
@@ -107,7 +113,7 @@ const hook=registerHooks({resolve:officeDependencyResolver({upstream,tools,deskt
 try{
   const {preparePrimaryRuntime,smokePrimaryRuntime}=await import(pathToFileURL(join(upstream,'prepare.ts')).href)
   const skillSource=join(dirname(desktopRequire.resolve('@deepseek-ai/dsh-skill-office/package.json')),'assets')
-  if(!prepared)await preparePrimaryRuntime({target,output,cache:join(work,'downloads'),version,skillSource})
+  if(!prepared)await preparePrimaryRuntime({target,output,cache:join(work,'downloads'),version,skillSource,pnpmArchive})
   const smoke=mkdtempSync(join(work,'smoke-'))
   const payload=JSON.parse(readFileSync(join(output,'primary-runtime/runtime.json'),'utf8'))
   writeFileSync(join(smoke,'package.json'),JSON.stringify({private:true,packageManager:`pnpm@${payload.pnpm}`}))
