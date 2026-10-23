@@ -96,3 +96,18 @@ test('workflow enables enterprise mode after package checks and verifies it befo
   assert.equal(workflow.jobs.release, undefined)
   assert.equal(workflow.on.push.tags, undefined)
 })
+
+test('Windows installer is downloadable independently before portable packaging completes', () => {
+  const workflow = parse(readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8'))
+  const steps = workflow.jobs['desktop-windows'].steps
+  const uploadIndex = suffix => steps.findIndex(step => step.uses === 'actions/upload-artifact@v6' && step.with.name.endsWith(suffix))
+  const installer = uploadIndex('-Installer'), portable = uploadIndex('-Portable')
+  const portableBuild = steps.findIndex(step => step.run === 'yarn workspace ${{ matrix.workspace }} dist:win-portable')
+  assert.ok(installer >= 0 && installer < portableBuild && portableBuild < portable)
+  assert.match(steps[installer].with.path, /Setup\.exe/u)
+  assert.doesNotMatch(steps[installer].with.path, /Portable\.zip/u)
+  assert.match(steps[portable].with.path, /Portable\.zip/u)
+  assert.doesNotMatch(steps[portable].with.path, /Setup\.exe/u)
+  assert.equal(steps[installer].with['if-no-files-found'], 'error')
+  assert.equal(steps[portable].with['if-no-files-found'], 'error')
+})

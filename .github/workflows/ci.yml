@@ -157,19 +157,25 @@ jobs:
         run: yarn workspace ${{ matrix.workspace }} dist:win
       - name: Verify packaged enterprise Windows login
         run: node scripts/enterprise-ci-package.mjs verify ${{ matrix.workspace }} win32
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}-Windows-Installer
+          if-no-files-found: error
+          path: |
+            ${{ matrix.workspace }}/dist/*-Setup.exe
+            ${{ matrix.workspace }}/dist/enterprise-win32-verification.json
       - name: Build enterprise Windows portable archive
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: yarn workspace ${{ matrix.workspace }} dist:win-portable
-      - name: Upload Windows packages
+      - name: Upload Windows portable archive
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.artifact }}-Windows
+          name: ${{ matrix.artifact }}-Windows-Portable
           if-no-files-found: error
           path: |
-            ${{ matrix.workspace }}/dist/*-Setup.exe
             ${{ matrix.workspace }}/dist/*-Portable.zip
-            ${{ matrix.workspace }}/dist/enterprise-win32-verification.json
 
   # macOS-only universal packaging smoke on a real macOS runner: the signed
   # release is built manually on a credentialed machine, so an unsigned DMG
