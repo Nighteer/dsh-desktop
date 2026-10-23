@@ -1865,7 +1865,7 @@
     "enterprise:package": "node scripts/enterprise-desktop.mjs --beta --package",
     "enterprise:release:desktop": "node scripts/release-enterprise-desktop.mjs",
     "enterprise:release:candidate": "node scripts/release-enterprise-desktop.mjs --candidate",
-    "enterprise:test:release": "node --test scripts/desktop-release.test.mjs scripts/enterprise-ci-package.test.mjs scripts/qq-qr-unavailable.test.mjs scripts/office-dependency-resolution.test.mjs",
+    "enterprise:test:release": "node --test scripts/desktop-release.test.mjs scripts/enterprise-ci-package.test.mjs scripts/qq-qr-unavailable.test.mjs scripts/office-dependency-resolution.test.mjs scripts/official-office-files.test.mjs",
     "build": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop build && yarn workspace dsh-plugin-desktop-beta build",
     "typecheck": "yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck",
     "test": "yarn workspace dsh-plugin-desktop test && yarn workspace dsh-plugin-desktop-beta test && yarn workspace dsh-community-market test && yarn test:ppt",

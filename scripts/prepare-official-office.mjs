@@ -1,11 +1,12 @@
 /** Prepare the pinned upstream Office payload in fresh directories only. */
 import {spawnSync} from 'node:child_process'
 import {createHash,randomUUID} from 'node:crypto'
-import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,renameSync,writeFileSync} from 'node:fs'
+import {existsSync,mkdirSync,mkdtempSync,readFileSync,renameSync,writeFileSync} from 'node:fs'
 import {createRequire,registerHooks} from 'node:module'
 import {dirname,join,resolve,sep} from 'node:path'
 import {fileURLToPath,pathToFileURL} from 'node:url'
 import {officeDependencyResolver,lockedOfficePnpmArchive} from './office-dependency-resolution.mjs'
+import {copyOfficialOfficeSnapshot} from './official-office-files.mjs'
 
 const root=resolve(import.meta.dirname,'..')
 const edition=process.argv.includes('--stable')?'dsh-plugin-desktop':'dsh-plugin-desktop-beta'
@@ -132,7 +133,7 @@ for(const name of publishBoth?['dsh-plugin-desktop-beta','dsh-plugin-desktop']:[
   mkdirSync(directory,{recursive:true})
   const snapshot=join(directory,manifest.payloadDigest)
   if(existsSync(snapshot))throw Error(`Refusing to overwrite existing snapshot: ${snapshot}`)
-  cpSync(output,snapshot,{recursive:true,dereference:true,force:false,errorOnExist:true})
+  copyOfficialOfficeSnapshot(output,snapshot)
   writeFileSync(join(directory,pointerName),JSON.stringify({schema:1,directory:manifest.payloadDigest,inputs,coreVersion:'0.2.1-rc.2'},null,2))
   console.log(`Official Office ready: ${directory}`)
 }
