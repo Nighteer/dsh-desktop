@@ -20,6 +20,9 @@ describe('universal macOS native runtime preparation', () => {
     const root = 'Contents/Resources/official-office/snapshot/primary-runtime/dependencies/python'
     expect(matches(`${root}/bin/python3.12`)).toBe(true)
     expect(matches(`${root}/lib/python3.12/site-packages/numpy/.dylibs/libscipy_openblas64_.dylib`)).toBe(true)
+    for (const arch of ['x64', 'arm64']) {
+      expect(matches(`Contents/Resources/app/node_modules/@deepseek-ai/libreoffice-kit-darwin-${arch}/native.dylib`)).toBe(true)
+    }
     expect(matches('Contents/Resources/unrelated/native.dylib')).toBe(false)
   })
 
