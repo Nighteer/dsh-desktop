@@ -13,4 +13,6 @@ Run commands in this directory using Node ^22.19 or >=24 and the bundled Yarn4.1
 
 Validate Beta before synchronizing stable. Contracts/UI are fixed archives in vendor/shared; sibling backend/shared sources are not build dependencies.
 
+On first login, enterprise accounts automatically apply the current recommended desktop settings, record setup completion, and enter the main window without showing the setup wizard. Existing account/Profile preferences are preserved and can be adjusted later in Settings; mandatory first-login password changes remain in place.
+
 Ignored local-development.json contains only the original checkout path. Enterprise launchers reuse its .runtime-appdata; no accounts or chats are migrated. Never start old and new copies against the same account simultaneously. Earlier release documents remain as reference; use these commands as the current entry point.
