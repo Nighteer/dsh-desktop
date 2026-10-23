@@ -9,18 +9,17 @@ const first='11111111-1111-4111-8111-111111111111',second='22222222-2222-4222-82
 const info=(id=first)=>Response.json({product:'lets-enterprise',desktopApiVersion:1,instanceId:id})
 const fixture=()=>mkdtempSync(join(tmpdir(),'lets-enterprise-service-')) // Retained; no filesystem cleanup.
 describe('generic enterprise client connection',()=>{
-  it('allows selecting HTTPS after an HTTP policy is revoked without discarding saved identities',async()=>{
+  it('resumes HTTP without an environment allowlist and retains identities when switching to HTTPS',async()=>{
     const previous=process.env.DSH_ENTERPRISE_HTTP_ORIGINS
     const root=fixture(),transport=vi.fn<typeof fetch>().mockImplementation(async()=>info())
     try{
-      process.env.DSH_ENTERPRISE_HTTP_ORIGINS='http://10.10.0.5'
+      delete process.env.DSH_ENTERPRISE_HTTP_ORIGINS
       const firstConnection=new EnterpriseServiceConnection(root,undefined,transport)
       expect(await firstConnection.connect('http://10.10.0.5')).toBe(true)
-      delete process.env.DSH_ENTERPRISE_HTTP_ORIGINS
       transport.mockClear()
       const reopened=new EnterpriseServiceConnection(root,undefined,transport)
-      await expect(reopened.resume()).rejects.toThrow()
-      expect(transport).not.toHaveBeenCalled()
+      expect(await reopened.resume()).toBe(true)
+      expect(transport).toHaveBeenCalledTimes(1)
       expect(await reopened.connect('https://enterprise.example')).toBe(true)
       const saved=JSON.parse(readFileSync(reopened.settingsPath,'utf8'))
       expect(saved.instances['http://10.10.0.5']).toBe(first)
@@ -70,9 +69,9 @@ describe('generic enterprise client connection',()=>{
     await reopened.connect('https://second.example');expect(Object.keys(JSON.parse(readFileSync(reopened.settingsPath,'utf8')).instances)).toHaveLength(2)
     expect(readFileSync(join(root,'old-user-data.txt'),'utf8')).toBe('untouched');expect(readdirSync(root)).toContain('old-user-data.txt')
   })
-  it('rejects insecure/non-root/credential URLs before contacting them',async()=>{
+  it('rejects non-root, credential and unsupported protocol URLs before contacting them',async()=>{
     const transport=vi.fn<typeof fetch>()
-    for(const url of ['http://192.168.1.1:4310','https://user:password@example.com','https://example.com/api/v1','https://example.com/?key=secret','file:///a','https://example.com/#token','https://example.com/\\evil'])await expect(inspectEnterpriseService(url,transport)).rejects.toThrow('HTTPS')
+    for(const url of ['https://user:password@example.com','https://example.com/api/v1','https://example.com/?key=secret','file:///a','https://example.com/#token','https://example.com/\\evil'])await expect(inspectEnterpriseService(url,transport)).rejects.toThrow('HTTPS')
     expect(transport).not.toHaveBeenCalled()
     transport.mockResolvedValue(info());await inspectEnterpriseService('http://127.0.0.1:4310',transport)
   })

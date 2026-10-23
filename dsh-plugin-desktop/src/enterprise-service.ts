@@ -17,7 +17,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
 export async function inspectEnterpriseService(value: string, transport: typeof fetch = fetch): Promise<{ origin: string; info: EnterpriseDesktopInfo }> {
   let origin: string
   try { origin = enterpriseServiceUrl(value.trim()) }
-  catch { throw new Error('请填写完整的 HTTPS 根地址；内网 HTTP 地址需由管理员明确允许，不能包含账号密码、路径或参数。') }
+  catch { throw new Error('请填写完整的 HTTP 或 HTTPS 根地址，不能包含账号密码、路径或参数。') }
   let response: Response
   try {
     response = await transport(`${origin}/api/v1/desktop-info`, { method: 'GET', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } })
@@ -60,8 +60,7 @@ export class EnterpriseServiceConnection {
         const saved = JSON.parse(raw) as ServiceSettings
         if (saved.version !== 1 || typeof saved.selectOnNextLaunch !== 'boolean' || !saved.instances || Array.isArray(saved.instances) || typeof saved.instances !== 'object') throw new Error('invalid settings')
         const entries = Object.entries(saved.instances)
-        // Saved identities are data, not permission to connect. A revoked HTTP
-        // policy must block requests without making the settings file corrupt.
+        // Validate saved root URLs and identity pins without requiring an HTTP allowlist.
         if (entries.length > 256 || entries.some(([origin, id]) => enterpriseOrigin(origin, [origin]) !== origin || typeof id !== 'string' || !uuid.test(id))) throw new Error('invalid identity pins')
         if (saved.selectedOrigin !== null && (typeof saved.selectedOrigin !== 'string' || !Object.hasOwn(saved.instances, saved.selectedOrigin))) throw new Error('invalid selection')
         this.settings = { version: 1, selectedOrigin: saved.selectedOrigin, selectOnNextLaunch: saved.selectOnNextLaunch, instances: Object.fromEntries(entries) }

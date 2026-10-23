@@ -10771,50 +10771,50 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
-  version: 0.1.0-split.2
-  resolution: "dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz#../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz::hash=b81755&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+"dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
+  version: 0.1.0-split.3
+  resolution: "dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz#../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz::hash=f4651f&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   dependencies:
     yaml: "npm:^2.9.0"
-  checksum: 10c0/e629df3e6fbb9c58384d3c274a986f1a200b963a670d2c60869265717b2621adb58735b3d08adf720f97b71df3f5e3d4c17c6bd7703f2d12f27bc14610dbf12c
+  checksum: 10c0/956ed37a0df66a38daa4f0ce8c1ecd02b6430a8ddaacb0161d1a9f5a9a643c5be58bf36019aaff2a0bcab1230d9b772b438785603c7035895b086dc5c1ee3bf9
   languageName: node
   linkType: hard
 
-"dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz::locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta":
-  version: 0.1.0-split.2
-  resolution: "dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz#../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz::hash=b81755&locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta"
+"dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz::locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta":
+  version: 0.1.0-split.3
+  resolution: "dsh-enterprise-contracts@file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz#../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz::hash=f4651f&locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta"
   dependencies:
     yaml: "npm:^2.9.0"
-  checksum: 10c0/e629df3e6fbb9c58384d3c274a986f1a200b963a670d2c60869265717b2621adb58735b3d08adf720f97b71df3f5e3d4c17c6bd7703f2d12f27bc14610dbf12c
+  checksum: 10c0/956ed37a0df66a38daa4f0ce8c1ecd02b6430a8ddaacb0161d1a9f5a9a643c5be58bf36019aaff2a0bcab1230d9b772b438785603c7035895b086dc5c1ee3bf9
   languageName: node
   linkType: hard
 
-"dsh-enterprise-contracts@file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz::locator=lets-desktop%40workspace%3A.":
-  version: 0.1.0-split.2
-  resolution: "dsh-enterprise-contracts@file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz#vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz::hash=b81755&locator=lets-desktop%40workspace%3A."
+"dsh-enterprise-contracts@file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz::locator=lets-desktop%40workspace%3A.":
+  version: 0.1.0-split.3
+  resolution: "dsh-enterprise-contracts@file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz#vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz::hash=f4651f&locator=lets-desktop%40workspace%3A."
   dependencies:
     yaml: "npm:^2.9.0"
-  checksum: 10c0/e629df3e6fbb9c58384d3c274a986f1a200b963a670d2c60869265717b2621adb58735b3d08adf720f97b71df3f5e3d4c17c6bd7703f2d12f27bc14610dbf12c
+  checksum: 10c0/956ed37a0df66a38daa4f0ce8c1ecd02b6430a8ddaacb0161d1a9f5a9a643c5be58bf36019aaff2a0bcab1230d9b772b438785603c7035895b086dc5c1ee3bf9
   languageName: node
   linkType: hard
 
-"dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
-  version: 0.1.0-split.2
-  resolution: "dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz#../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz::hash=289978&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+"dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
+  version: 0.1.0-split.3
+  resolution: "dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz#../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz::hash=e09efa&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   peerDependencies:
     react: 18.3.1
     react-dom: 18.3.1
-  checksum: 10c0/49298412b88fe20d33e60ae72f3886848f7f03efe209028100e00bfcc020942fdce43cd7860f0aed1de58baba474c39188c87029ed2c621c8a81c01e55b1ef9b
+  checksum: 10c0/6e3dded1365c4ff8418f496145cc9014c05361d64b9eaf120f872449dfbf3afedf26c1b9d36e43b31310c2b5aad00e0615a5aad522431c87226d70107d3b8513
   languageName: node
   linkType: hard
 
-"dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz::locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta":
-  version: 0.1.0-split.2
-  resolution: "dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz#../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz::hash=289978&locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta"
+"dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz::locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta":
+  version: 0.1.0-split.3
+  resolution: "dsh-enterprise-ui@file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz#../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz::hash=e09efa&locator=dsh-plugin-desktop-beta%40workspace%3Adsh-plugin-desktop-beta"
   peerDependencies:
     react: 18.3.1
     react-dom: 18.3.1
-  checksum: 10c0/49298412b88fe20d33e60ae72f3886848f7f03efe209028100e00bfcc020942fdce43cd7860f0aed1de58baba474c39188c87029ed2c621c8a81c01e55b1ef9b
+  checksum: 10c0/6e3dded1365c4ff8418f496145cc9014c05361d64b9eaf120f872449dfbf3afedf26c1b9d36e43b31310c2b5aad00e0615a5aad522431c87226d70107d3b8513
   languageName: node
   linkType: hard
 
@@ -10996,8 +10996,8 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
-    dsh-enterprise-contracts: "file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz"
-    dsh-enterprise-ui: "file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz"
+    dsh-enterprise-contracts: "file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz"
+    dsh-enterprise-ui: "file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz"
     dsh-ppt: "workspace:*"
     dshmarket: "npm:1.66.44"
     electron: "npm:44.0.0"
@@ -11205,8 +11205,8 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
-    dsh-enterprise-contracts: "file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz"
-    dsh-enterprise-ui: "file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.2.tgz"
+    dsh-enterprise-contracts: "file:../vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz"
+    dsh-enterprise-ui: "file:../vendor/shared/dsh-enterprise-ui-0.1.0-split.3.tgz"
     dsh-ppt: "workspace:*"
     dshmarket: "npm:1.66.44"
     electron: "npm:44.0.0"
@@ -13330,7 +13330,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "lets-desktop@workspace:."
   dependencies:
-    dsh-enterprise-contracts: "file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz"
+    dsh-enterprise-contracts: "file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz"
   dependenciesMeta:
     "@deepseek-ai/dsh-subprocess-local":
       built: true

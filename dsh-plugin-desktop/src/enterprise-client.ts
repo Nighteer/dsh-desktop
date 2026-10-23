@@ -1,15 +1,13 @@
 /** Main-process-only enterprise session client. No credentials enter the Host environment. */
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { enterpriseOrigin, explicitHttpOrigins, type DesktopSession, type Identity } from 'dsh-enterprise-contracts'
-
-let packagedHttpOrigins: readonly string[] = []
-export function configureEnterpriseHttpOrigins(origins: readonly string[]): void {
-  packagedHttpOrigins = explicitHttpOrigins(origins.join(','))
-}
+import { enterpriseOrigin, type DesktopSession, type Identity } from 'dsh-enterprise-contracts'
 
 export function enterpriseServiceUrl(value: string): string {
-  return enterpriseOrigin(value, [...packagedHttpOrigins, ...explicitHttpOrigins(process.env.DSH_ENTERPRISE_HTTP_ORIGINS)])
+  // Desktop accepts HTTP and HTTPS for any host; retain the shared root-URL
+  // validation without requiring an HTTP host policy or environment variable.
+  const origin = new URL(value).origin
+  return enterpriseOrigin(value, [origin])
 }
 export function enterpriseAccountPaths(root: string, instance: string, user: string) {
   const valid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu

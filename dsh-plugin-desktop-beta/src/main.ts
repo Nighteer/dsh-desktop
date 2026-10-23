@@ -159,6 +159,7 @@ import {
 } from './setup-wizard-settings.ts'
 import type { DesktopSetupWizardResult } from './setup-wizard-contract.ts'
 import { DesktopSetupWizardWindow } from './setup-wizard-window.ts'
+import { resolveDesktopInitialSetup } from './setup-wizard-startup.ts'
 import { ProfileCreateWindow } from './profile-create-window.ts'
 import { DesktopProfileSelectionWindow } from './profile-selection-window.ts'
 import { showDesktopDialog } from './desktop-dialog-window.ts'
@@ -1272,24 +1273,25 @@ async function start(releaseUserDataRoot: string, enterprise?: DesktopEnterprise
     if (safeModePaths === undefined && desktopSetupWizardRequired(setupWizardState, setupWizardVersions)
       && !hasDesktopProfileUsageHistory(releaseUserDataLocations, prepared.profile.dir, activeProfileName)) {
       const setupSettings = readDesktopSetupWizardSettings(prepared.settingsDocument)
-      setupWizardWindow = new DesktopSetupWizardWindow({
-        locale: desktopLocaleFromLanguageTag(app.getLocale()),
-        input: {
-          appVersion,
-          profileName: activeProfileName,
-          platform: runtime.platform,
-          micaSupported: process.platform === 'win32' && windowsSupportsMica(runtime.windowsBuild),
-          ...setupSettings,
-          market: marketSelection.requested,
-          aaEnabled: profilePreferences?.aaEnabled === true,
-        },
+      const setupResult: DesktopSetupWizardResult = await resolveDesktopInitialSetup({
+        appVersion,
+        profileName: activeProfileName,
+        platform: runtime.platform,
+        micaSupported: process.platform === 'win32' && windowsSupportsMica(runtime.windowsBuild),
+        ...setupSettings,
+        market: marketSelection.requested,
+        aaEnabled: profilePreferences?.aaEnabled === true,
+      }, enterprise !== undefined, async input => {
+        setupWizardWindow = new DesktopSetupWizardWindow({
+          locale: desktopLocaleFromLanguageTag(app.getLocale()),
+          input,
+        })
+        try {
+          return await setupWizardWindow.run()
+        } finally {
+          setupWizardWindow = undefined
+        }
       })
-      let setupResult: DesktopSetupWizardResult
-      try {
-        setupResult = await setupWizardWindow.run()
-      } finally {
-        setupWizardWindow = undefined
-      }
       if (setupResult.action === 'quit') {
         startupRecoveryController?.dispose()
         startupRecoveryController = undefined

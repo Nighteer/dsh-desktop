@@ -15,10 +15,13 @@ test('formal releases allow user-selected endpoints but never silently become un
   assert.throws(() => releasePlan(['--candidate'], {}, 'linux', 'x64'))
   assert.throws(() => releasePlan(['--acceptance-only'], { WIN_CSC_LINK: 'managed-signing.pfx' }, 'win32', 'x64'))
 })
-test('HTTP release configuration is exact and explicit', () => {
+test('legacy HTTP release options remain accepted without requiring a domain preset', () => {
   const env = { DSH_ENTERPRISE_SERVER_URL: 'http://10.10.0.5', WIN_CSC_LINK: 'managed-signing.pfx' }
   assert.equal(releasePlan([], env, 'win32', 'x64').url, undefined)
-  assert.deepEqual(releasePlan(['--allow-http-origin', 'http://10.10.0.5'], env, 'win32', 'x64').allowedHttpOrigins, ['http://10.10.0.5'])
+  for (const edition of [[], ['--beta']]) {
+    assert.deepEqual(releasePlan(edition, env, 'win32', 'x64').allowedHttpOrigins, [])
+    assert.deepEqual(releasePlan([...edition, '--allow-http-origin', 'http://10.10.0.5'], env, 'win32', 'x64').allowedHttpOrigins, ['http://10.10.0.5'])
+  }
   assert.throws(() => releasePlan(['--allow-http-origin', '*'], env, 'win32', 'x64'))
 })
 test('build subprocesses do not inherit signing credentials', () => {

@@ -1864,7 +1864,7 @@
     "enterprise:package": "node scripts/enterprise-desktop.mjs --beta --package",
     "enterprise:release:desktop": "node scripts/release-enterprise-desktop.mjs",
     "enterprise:release:candidate": "node scripts/release-enterprise-desktop.mjs --candidate",
-    "enterprise:test:release": "node --test scripts/desktop-release.test.mjs",
+    "enterprise:test:release": "node --test scripts/desktop-release.test.mjs scripts/enterprise-ci-package.test.mjs",
     "build": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop build && yarn workspace dsh-plugin-desktop-beta build",
     "typecheck": "yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck",
     "test": "yarn workspace dsh-plugin-desktop test && yarn workspace dsh-plugin-desktop-beta test && yarn workspace dsh-community-market test && yarn test:ppt",
@@ -1906,6 +1906,6 @@
     "check:boundaries": "node scripts/check-boundaries.mjs"
   },
   "dependencies": {
-    "dsh-enterprise-contracts": "file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz"
+    "dsh-enterprise-contracts": "file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.3.tgz"
   }
 }

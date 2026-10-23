@@ -2,6 +2,8 @@
 
 通用安装包默认不预置服务地址。安装后由用户填写服务端地址，继续保留更换企业服务和身份确认流程。
 
+稳定版与 Beta 均允许任意有效的 HTTP 或 HTTPS 企业服务根地址，无需域名白名单、打包放行参数或员工电脑环境变量。例如可填写 `http://lets-harness.letsbim.cn/` 或 `http://192.168.15.216:4310/`，不要附加 `/api/` 或 `/api/v1`。仍拒绝 URL 内嵌账号密码、路径、参数及其他协议，并校验服务身份。已安装的旧包需重新构建并更新。
+
 ## 命令
 
 在仓库根目录使用固定的 Yarn 4.18.0。先验证 Beta，再验证正式版；新输出位于 `.artifacts/enterprise-<edition>-随机目录`，保留历史文件。
@@ -15,13 +17,17 @@ corepack yarn enterprise:release:desktop
 
 以上命令根据当前构建主机生成原生平台、原生架构的安装包：Windows NSIS EXE，Mac DMG。候选包明确使用 `-beta.0` 版本号、无签名、`readyForProduction=false`；不应通过正式通道发布。正式命令要求签名，不能悄悄退化为未签名包。`--check-only` 只检查当前平台、参数及发布凭据，不执行构建，不代表通过完整发布验收。
 
-如需明确允许一个纯内网 HTTP 入口，但仍由用户填写地址：
+旧 `--allow-http-origin` 参数保留命令行兼容，但新版客户端不依赖该列表，也不读取 `DSH_ENTERPRISE_HTTP_ORIGINS` 来限制 HTTP。发布入口不读取 `DSH_ENTERPRISE_SERVER_URL`，并拒绝包含预置服务地址的源配置；服务地址始终由用户在运行后填写。
 
-```text
-corepack yarn enterprise:release:candidate --allow-http-origin http://10.10.0.5
-```
+## GitHub Actions 自动企业打包
 
-可重复该选项添加多个精确源地址。也可不预置列表，由 IT 在实际启动环境配置 `DSH_ENTERPRISE_HTTP_ORIGINS`。保持 HTTPS 为默认。发布入口不读取 `DSH_ENTERPRISE_SERVER_URL`，并拒绝包含预置服务地址的源配置；服务地址始终由用户在运行后填写。
+`.github/workflows/ci.yml` 在推送 `master` / `dev-lets`、版本标签及手动运行时触发。Windows 和 macOS 的稳定版/Beta 打包任务在原有平台检查通过后，执行 `scripts/enterprise-ci-package.mjs prepare <workspace>`，仅在 CI 检出目录中为应用及 Electron Builder 元数据写入 `dshEnterprise: true`，不预置企业服务地址。
+
+继续沿用已存在的 Windows EXE/便携 ZIP 和 macOS Universal DMG 打包步骤及原生校验，CI 产物仍未签名。打包后会核对实际 unpacked 应用的产品包名、版本和企业登录标识；失败时停止上传。校验报告包含安装包 SHA-256，随 Actions Artifacts 一并上传：Windows 为 `enterprise-win32-verification.json`，macOS 为 `enterprise-darwin-verification.json`。版本标签仅在所有原有检查通过后创建 GitHub Release，附带稳定版安装包和校验报告；不代表已完成正式签名与业务验收。
+
+GitHub 仓库根目录应对应本 `desktop` 工程。提交 `vendor/shared` 中使用版本的两个 tgz、清单、依赖清单和锁文件即可，不需要检出同级 `shared` / `enterprise` 源码。上游 `deepseek-harness` 保留 Git 子模块，工作流使用递归检出。
+
+本机可运行 `node .yarn/releases/yarn-4.18.0.cjs enterprise:test:release` 验证 CI 企业元数据及流程规则；测试只使用独立保留的 fixture，不执行安装器或修改真实产品清单。完整跨平台出包仍需在 GitHub 的 Windows/macOS runner 上验证。
 
 ## Windows
 
@@ -49,7 +55,7 @@ corepack yarn enterprise:release:candidate --allow-http-origin http://10.10.0.5
 
 Windows 候选包和正式包均使用 7z 载荷，禁止切换到当前有兼容问题的 nsisunz ZIP 解压插件。发布入口会从最终 EXE 提取真实载荷，调用实际 NSIS 解压插件解压到全新中文长路径目录，并逐文件校验包括 node_modules 在内的全部内容。此步骤不注册程序、不创建快捷方式，也不替代干净系统上的完整安装验收。
 
-需要另外在干净 Windows/Mac 上完成：首次安装、用户填写地址、HTTP 显式允许、HTTPS 信任、企业登录、角色权限、模型与知识库、Office/PPT、插件、退出任务保护，以及真实旧版到新版的升级和用户数据保留。构建通过不能替代这些验收。
+需要另外在干净 Windows/Mac 上完成：首次安装、用户填写地址、任意 HTTP 根地址连接、HTTPS 信任、企业登录、角色权限、模型与知识库、Office/PPT、插件、退出任务保护，以及真实旧版到新版的升级和用户数据保留。构建通过不能替代这些验收。
 
 首发前确认试用机的现有版本号：原项目 2.0.x 到新产品 1.0.x 不会被版本比较识别为升级。此类试用机需单独验收手工切换、安装器行为和数据保留，或决定使用更高的首发版本号；不要承诺后台发布 1.0.0 后会自动覆盖 2.0.x。
 

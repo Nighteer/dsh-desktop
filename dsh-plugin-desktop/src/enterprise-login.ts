@@ -3,17 +3,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { EnterpriseClient, enterpriseAccountPaths, monitorEnterpriseSession, configureEnterpriseHttpOrigins } from './enterprise-client.ts'
+import { EnterpriseClient, enterpriseAccountPaths, monitorEnterpriseSession } from './enterprise-client.ts'
 import { ENTERPRISE_LOGIN_CHANNEL, type EnterpriseLoginReply, type EnterpriseLoginState } from './enterprise-login-contract.ts'
 import { setDesktopEnterprisePartition } from './window-options.ts'
 import { DesktopEnterpriseApplications } from './enterprise-applications.ts'
 import { EnterpriseServiceConnection } from './enterprise-service.ts'
 
 export function enterpriseConfiguration(): { origin?: string } | undefined {
-  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { dshEnterprise?: boolean; dshEnterpriseServer?: string; dshEnterpriseHttpOrigins?: string[] }
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { dshEnterprise?: boolean; dshEnterpriseServer?: string }
   const required = manifest.dshEnterprise === true || (!app.isPackaged && process.env.DSH_ENTERPRISE_MODE === '1')
   if (!required) return undefined
-  configureEnterpriseHttpOrigins(manifest.dshEnterpriseHttpOrigins ?? [])
   // Package metadata is only a first-run suggestion, never a locked endpoint.
   const origin = manifest.dshEnterpriseServer ?? (!app.isPackaged ? process.env.DSH_ENTERPRISE_SERVER_URL : undefined)
   return origin ? { origin } : {}
@@ -76,7 +75,7 @@ export class DesktopEnterpriseLogin {
     let complete = false, busy = false
     const state = (): EnterpriseLoginState => ({
       mustChangePassword: this.connection.client?.session?.user.mustChangePassword ?? false,
-      allowRemember: this.canRemember(), message: this.message || this.connection.message || (this.connection.origin.startsWith('http:') ? '当前使用 HTTP 连接，传输未加密，仅限管理员批准的内网。' : ''),
+      allowRemember: this.canRemember(), message: this.message || this.connection.message,
       phase: this.connection.client ? 'login' : 'connection', origin: this.connection.origin,
       ...(this.connection.instanceId ? {instanceId:this.connection.instanceId} : {}),
       ...(this.connection.pending ? {instanceChange:{previous:this.connection.pending.previousInstanceId,next:this.connection.pending.instanceId}} : {}),

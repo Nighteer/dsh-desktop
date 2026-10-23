@@ -134,7 +134,7 @@ describe('published package surface', () => {
     expect(main).toContain("desktopTrayLabel(runtime.locale, 'exitSafeMode')")
     expect(main).toContain("desktopTrayLabel(runtime.locale, 'enterSafeMode')")
     expect(main).toContain('invoke: () => runtime.requestSafeModeRestart()')
-    expect(main).toContain('prepareSafeMode()\n    }\n    restartRequested = true')
+    expect(main).toMatch(/prepareSafeMode\(\)\s*\}\s*restartRequested = true/u)
     expect(main).toContain('notifyDesktopSafeModeActive(runtime, electronLogger)')
     expect(main).toContain('safeModePaths !== undefined && DESKTOP_SAFE_MODE_DEFAULTS.settings.notifications.enabled')
     expect(main).toContain('const setupWizardState = safeModePaths === undefined')
@@ -1075,11 +1075,12 @@ describe('published package surface', () => {
     }))
     expect(metadata.icc).toEqual(source.icc)
     expect(info).toEqual(expect.objectContaining({
-      width: 824,
       height: 824,
-      trimOffsetLeft: -100,
       trimOffsetTop: -100,
     }))
+    // The portrait logo keeps transparent side padding inside the square canvas.
+    expect(info.width).toBeLessThan(824)
+    expect(Math.abs((1024 - info.width) / 2 + (info.trimOffsetLeft ?? 0))).toBeLessThanOrEqual(2)
   })
 
   it('keeps Electron out of production dependencies consumed by electron-builder', () => {

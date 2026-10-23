@@ -90,6 +90,9 @@ jobs:
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - if: needs.changes.outputs.product == 'true'
         run: yarn install --immutable
+      - name: Check enterprise packaging metadata and workflow
+        if: needs.changes.outputs.product == 'true'
+        run: yarn enterprise:test:release
       - name: Temporarily skip AA profile smoke in CI
         if: needs.changes.outputs.product == 'true'
         # Remove this step after AA Host service activation is fixed.
@@ -143,11 +146,15 @@ jobs:
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
       - run: yarn workspace ${{ matrix.workspace }} check:win-package
-      - name: Build Windows installer
+      - name: Enable enterprise login in Windows packages
+        run: node scripts/enterprise-ci-package.mjs prepare ${{ matrix.workspace }}
+      - name: Build enterprise Windows installer
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: yarn workspace ${{ matrix.workspace }} dist:win
-      - name: Build Windows portable archive
+      - name: Verify packaged enterprise Windows login
+        run: node scripts/enterprise-ci-package.mjs verify ${{ matrix.workspace }} win32
+      - name: Build enterprise Windows portable archive
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: yarn workspace ${{ matrix.workspace }} dist:win-portable
@@ -159,6 +166,7 @@ jobs:
           path: |
             ${{ matrix.workspace }}/dist/*-Setup.exe
             ${{ matrix.workspace }}/dist/*-Portable.zip
+            ${{ matrix.workspace }}/dist/enterprise-win32-verification.json
 
   # macOS-only universal packaging smoke on a real macOS runner: the signed
   # release is built manually on a credentialed machine, so an unsigned DMG
@@ -196,16 +204,22 @@ jobs:
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
       - run: yarn workspace ${{ matrix.workspace }} check:mac-package
-      - name: Build macOS smoke artifact
+      - name: Enable enterprise login in macOS packages
+        run: node scripts/enterprise-ci-package.mjs prepare ${{ matrix.workspace }}
+      - name: Build enterprise macOS smoke artifact
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: yarn workspace ${{ matrix.workspace }} dist:mac-smoke
+      - name: Verify packaged enterprise macOS login
+        run: node scripts/enterprise-ci-package.mjs verify ${{ matrix.workspace }} darwin
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}-macOS
           if-no-files-found: error
-          path: ${{ matrix.workspace }}/dist/mac-smoke/*.dmg
+          path: |
+            ${{ matrix.workspace }}/dist/mac-smoke/*.dmg
+            ${{ matrix.workspace }}/dist/mac-smoke/enterprise-darwin-verification.json
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the
   # pinned submodule's own Yarn/pnpm release on Windows.
@@ -252,5 +266,7 @@ jobs:
             --title "$TAG" \
             --generate-notes \
             release-artifacts/macos/*.dmg \
+            release-artifacts/macos/enterprise-darwin-verification.json \
             release-artifacts/windows/*-Setup.exe \
-            release-artifacts/windows/*-Portable.zip
+            release-artifacts/windows/*-Portable.zip \
+            release-artifacts/windows/enterprise-win32-verification.json

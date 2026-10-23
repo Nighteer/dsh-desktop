@@ -15,6 +15,13 @@ async function click(label:string){await act(async()=>[...container.querySelecto
 async function fill(value:string){await act(async()=>{const input=container.querySelector('input')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}))})}
 async function submit(){await act(async()=>container.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))}
 describe('enterprise connection and login UI',()=>{
+  it('explains HTTP and HTTPS support and submits an arbitrary HTTP service address',async()=>{
+    const origin='http://another-company.example:8080'
+    const invoke=vi.fn<EnterpriseLoginBridge['invoke']>().mockResolvedValueOnce({ok:true,state:initial}).mockResolvedValueOnce({ok:true,state:{...initial,phase:'login',origin}})
+    await mount(invoke);expect(container.querySelector('#enterprise-service-hint')?.textContent).toBe('支持 HTTP 或 HTTPS 根地址，不需要 /api/ 或 /api/v1。')
+    await fill(origin);await submit();expect(invoke).toHaveBeenLastCalledWith({action:'connect',origin})
+    expect(container.querySelector('input[type=password]')).not.toBeNull()
+  })
   it('does not show password fields before a compatible service is selected and clears them when changing service',async()=>{
     const invoke=vi.fn<EnterpriseLoginBridge['invoke']>().mockResolvedValueOnce({ok:true,state:initial}).mockResolvedValueOnce({ok:true,state:{...initial,phase:'login',origin:'https://first.example',instanceId:'first'}}).mockResolvedValueOnce({ok:true,state:{...initial,origin:'https://first.example'}})
     await mount(invoke);expect(container.querySelector('input[type=password]')).toBeNull();expect(container.querySelector('img')?.alt).toBe('LETS')

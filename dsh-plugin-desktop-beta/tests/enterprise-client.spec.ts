@@ -13,10 +13,11 @@ describe('enterprise startup boundary',()=>{
     expect(database.length).toBeLessThan(260)
     expect(paths.partition).toMatch(/^persist:dsh-e-[a-f0-9]{32}$/u)
   })
-  it('accepts HTTPS and loopback only, refusing credential-bearing endpoints',()=>{
+  it('accepts HTTP and HTTPS, refusing credential-bearing endpoints',()=>{
     expect(enterpriseServiceUrl('http://127.0.0.1:4310')).toBe('http://127.0.0.1:4310')
     expect(enterpriseServiceUrl('https://enterprise.example')).toBe('https://enterprise.example')
-    for(const url of ['http://192.168.1.1','https://user:pass@example.com','file:///tmp','https://example.com/?token=secret'])expect(()=>enterpriseServiceUrl(url)).toThrow()
+    expect(enterpriseServiceUrl('http://192.168.1.1')).toBe('http://192.168.1.1')
+    for(const url of ['https://user:pass@example.com','file:///tmp','https://example.com/?token=secret'])expect(()=>enterpriseServiceUrl(url)).toThrow()
   })
   it('uses immutable identity, release root and distinct browser partitions for isolation',()=>{
     const a=enterpriseAccountPaths('C:/dev/beta',instance,user),b=enterpriseAccountPaths('C:/dev/beta',instance,instance),stable=enterpriseAccountPaths('C:/dev/stable',instance,user)
