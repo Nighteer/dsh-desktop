@@ -21,9 +21,9 @@ corepack yarn enterprise:release:desktop
 
 ## GitHub Actions 自动企业打包
 
-`.github/workflows/ci.yml` 在推送 `master` / `dev-lets`、版本标签及手动运行时触发。Windows 和 macOS 的稳定版/Beta 打包任务在原有平台检查通过后，执行 `scripts/enterprise-ci-package.mjs prepare <workspace>`，仅在 CI 检出目录中为应用及 Electron Builder 元数据写入 `dshEnterprise: true`，不预置企业服务地址。
+`.github/workflows/ci.yml` 在推送 `master` / `dev-lets` 及手动运行时触发。沿用 `dev-lets` 分支已有设置：CI 只打稳定版，Beta 打包暂停，不按版本标签自动发布 GitHub Release。Windows 和 macOS 的打包任务在原有平台检查通过后，执行 `scripts/enterprise-ci-package.mjs prepare <workspace>`，仅在 CI 检出目录中为应用及 Electron Builder 元数据写入 `dshEnterprise: true`，不预置企业服务地址；两版源码继续同步维护。
 
-继续沿用已存在的 Windows EXE/便携 ZIP 和 macOS Universal DMG 打包步骤及原生校验，CI 产物仍未签名。打包后会核对实际 unpacked 应用的产品包名、版本和企业登录标识；失败时停止上传。校验报告包含安装包 SHA-256，随 Actions Artifacts 一并上传：Windows 为 `enterprise-win32-verification.json`，macOS 为 `enterprise-darwin-verification.json`。版本标签仅在所有原有检查通过后创建 GitHub Release，附带稳定版安装包和校验报告；不代表已完成正式签名与业务验收。
+继续沿用已存在的 Windows EXE/便携 ZIP 和 macOS Universal DMG 打包步骤及原生校验，CI 产物仍未签名。打包后会核对实际 unpacked 应用的产品包名、版本和企业登录标识；失败时停止上传。校验报告包含安装包 SHA-256，随 Actions Artifacts 一并上传：Windows 为 `enterprise-win32-verification.json`，macOS 为 `enterprise-darwin-verification.json`。从对应 Actions 运行的 Artifacts 下载，不自动创建 GitHub Release；不代表已完成正式签名与业务验收。
 
 GitHub 仓库根目录应对应本 `desktop` 工程。提交 `vendor/shared` 中使用版本的两个 tgz、清单、依赖清单和锁文件即可，不需要检出同级 `shared` / `enterprise` 源码。上游 `deepseek-harness` 保留 Git 子模块，工作流使用递归检出。
 

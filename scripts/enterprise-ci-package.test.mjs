@@ -89,9 +89,8 @@ test('workflow enables enterprise mode after package checks and verifies it befo
     assert.ok(gateIndex >= 0 && prepareIndex > gateIndex && buildIndex > prepareIndex && verifyIndex > buildIndex && uploadIndex > verifyIndex)
     assert.ok(steps[uploadIndex].with.path.includes(`enterprise-${platform}-verification.json`))
     assert.ok(steps.some(step => step.with?.submodules === 'recursive'))
-    assert.equal(job.strategy.matrix.include.length, 2)
+    assert.deepEqual(job.strategy.matrix.include.map(entry => entry.workspace), ['dsh-plugin-desktop'])
   }
-  assert.deepEqual(workflow.jobs.release.needs, ['check', 'desktop-windows', 'desktop-macos', 'upstream-command-windows'])
-  assert.ok(workflow.jobs.release.steps.at(-1).run.includes('enterprise-win32-verification.json'))
-  assert.ok(workflow.jobs.release.steps.at(-1).run.includes('enterprise-darwin-verification.json'))
+  assert.equal(workflow.jobs.release, undefined)
+  assert.equal(workflow.on.push.tags, undefined)
 })
