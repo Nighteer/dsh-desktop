@@ -17,7 +17,7 @@ vi.mock('electron',async()=>{
     hide(){}setIgnoreMouseEvents(){}
     static getAllWindows(){return harness.windows}
   }
-  return{app:{isPackaged:false,whenReady:async()=>{},on:vi.fn(),once:vi.fn(),setPath:vi.fn()},BrowserWindow:Window,dialog:{},Menu:{},MenuItem:class{},safeStorage:{isEncryptionAvailable:()=>true,encryptString:(s:string)=>Buffer.from('encrypted:'+s),decryptString:(b:Buffer)=>b.toString().slice(10)},session:{},WebContentsView:class{}}
+  return{app:{isPackaged:false,whenReady:async()=>{},on:vi.fn(),once:vi.fn(),setPath:vi.fn()},BrowserWindow:Window,dialog:{},Menu:{},MenuItem:class{},safeStorage:{isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'gnome_libsecret',encryptString:(s:string)=>Buffer.from('encrypted:'+s),decryptString:(b:Buffer)=>b.toString().slice(10)},session:{},WebContentsView:class{}}
 })
 import {DesktopEnterpriseLogin} from '../src/enterprise-login.ts'
 const first='11111111-1111-4111-8111-111111111111',second='22222222-2222-4222-8222-222222222222'

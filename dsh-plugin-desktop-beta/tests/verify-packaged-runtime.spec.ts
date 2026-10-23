@@ -214,8 +214,8 @@ describe('packaged desktop runtime verification', () => {
 
   it('keeps the shipped PTC preset present and integrity-protected in app.asar', () => {
     expect(REQUIRED_AGENT_PRESET_RUNTIME_ENTRIES).toEqual([
-      'node_modules/@deepseek-ai/dsh-agent-presets/presets/ptc/agent.cordis.yml',
-      'node_modules/@deepseek-ai/dsh-agent-presets/presets/ptc/preset.yml',
+      'node_modules/@deepseek-ai/dsh-web-app/presets/ptc.patch.yml',
+      'node_modules/@deepseek-ai/dsh-agent-preset/skills/cordis-plugin-development/SKILL.md',
     ])
     for (const entry of REQUIRED_AGENT_PRESET_RUNTIME_ENTRIES) {
       expect(REQUIRED_PACKAGED_RUNTIME_ENTRIES).toContain(entry)

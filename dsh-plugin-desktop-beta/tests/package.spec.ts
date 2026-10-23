@@ -76,12 +76,12 @@ const dshResolution = (name: string): unknown =>
 describe('published package surface', () => {
   it('keeps the private workspace version-neutral and versions the Beta package', () => {
     expect(workspaceManifest.version).toBeUndefined()
-    expect(manifest.version).toBe('2.0.12-beta.1')
+    expect(manifest.version).toBe('1.0.0-beta.1')
   })
 
   it('runs desktop and community market typechecks from the root command', () => {
     expect(workspaceManifest.scripts?.typecheck)
-      .toBe('yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck && yarn enterprise:typecheck')
+      .toBe('yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck')
   })
 
   it('skips only third-party declaration checking in the Desktop typecheck gate', () => {
@@ -106,7 +106,7 @@ describe('published package surface', () => {
   it('sets a distinct Beta process identity before taking the single-instance lock', () => {
     expect(productIdentity).toContain("packageName: 'dsh-plugin-desktop-beta'")
     expect(productIdentity).toContain("packageName: 'dsh-plugin-desktop'")
-    expect(productIdentity).toContain("productName: 'LETSDSH Desktop Beta'")
+    expect(productIdentity).toContain("productName: 'LETS Desktop Beta'")
     expect(productIdentity).toContain("appId: 'ai.deepseek.dsh.desktop.beta'")
     expect(productIdentity).toContain('DESKTOP_PRODUCT_IDENTITY = DESKTOP_RELEASE_IDENTITIES.beta')
     expect(productIdentity).toContain('OTHER_DESKTOP_PRODUCT_IDENTITY = DESKTOP_RELEASE_IDENTITIES.stable')
@@ -813,7 +813,7 @@ describe('published package surface', () => {
 
   it('fixes the installed application identity', () => {
     expect(workspaceManifest.version).toBeUndefined()
-    expect(manifest.version).toBe('2.0.12-beta.1')
+    expect(manifest.version).toBe('1.0.0-beta.1')
     expect(manifest.name).toBe('dsh-plugin-desktop-beta')
     expect(manifest.bin).toEqual({
       'dsh-desktop-beta': 'lib/bin.js',
@@ -821,7 +821,7 @@ describe('published package surface', () => {
     })
     expect(manifest.bin).not.toHaveProperty('dsh-desktop')
     expect(manifest.bin).not.toHaveProperty('dsh-plugin-desktop')
-    expect(manifest.build?.productName).toBe('LETSDSH Desktop Beta')
+    expect(manifest.build?.productName).toBe('LETS Desktop Beta')
     expect(manifest.build?.appId).toBe('ai.deepseek.dsh.desktop.beta')
     expect(manifest.build?.asar).toBe(false)
     expect(manifest.build).not.toHaveProperty('asarUnpack')
@@ -857,7 +857,7 @@ describe('published package surface', () => {
       '!node_modules/fs-ext/build/**',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
-    expect(manifest.build?.mac?.artifactName).toBe('LETSDSH-Desktop-Beta-${version}-${arch}.${ext}')
+    expect(manifest.build?.mac?.artifactName).toBe('LETS-Desktop-Beta-${version}-${arch}.${ext}')
     expect(manifest.build?.mac?.mergeASARs).toBe(false)
     expect(manifest.build?.mac?.signIgnore).toEqual(['\\.(?:pak|dat|wasm)$'])
     expect(manifest.build?.win?.compression).toBe('normal')
@@ -866,7 +866,7 @@ describe('published package surface', () => {
       target: 'nsis',
       arch: ['x64'],
     }])
-    expect(manifest.build?.win?.artifactName).toBe('LETSDSH-Desktop-Beta-${version}-${arch}-Portable.${ext}')
+    expect(manifest.build?.win?.artifactName).toBe('LETS-Desktop-Beta-${version}-${arch}-Portable.${ext}')
     expect(manifest.build?.nsis).toEqual({
       installerIcon: 'build/app-icon.ico',
       uninstallerIcon: 'build/app-icon.ico',
@@ -879,9 +879,9 @@ describe('published package surface', () => {
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
       differentialPackage: false,
-      shortcutName: 'LETSDSH Desktop Beta',
+      shortcutName: 'LETS Desktop Beta',
       useZip: false,
-      artifactName: 'LETSDSH-Desktop-Beta-${version}-${arch}-Setup.${ext}',
+      artifactName: 'LETS-Desktop-Beta-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
   })

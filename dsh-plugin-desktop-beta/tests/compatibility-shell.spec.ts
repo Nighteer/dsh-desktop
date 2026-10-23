@@ -56,7 +56,7 @@ function fixture(platform: 'darwin' | 'win32' = 'darwin', mode: 'compatibility' 
     checkForUpdates: vi.fn(async () => {}),
     exportDiagnostics: vi.fn(async () => {}),
   }
-  const spec = { mode, material, requestModeChange: vi.fn(async () => {}) } as unknown as DesktopShellSpec
+  const spec = { url: 'http://127.0.0.1:4311/', mode, material, requestModeChange: vi.fn(async () => {}) } as unknown as DesktopShellSpec
   const shell = new CompatibilityShell(window as unknown as BrowserWindow, spec, platform, '/desktop/preload.cjs', actions)
   const handler = ipc.handle.mock.calls[0]?.[1] as (event: unknown, command: unknown) => unknown
   const event = () => ({ sender: webContents, senderFrame: webContents.mainFrame })
@@ -84,7 +84,7 @@ describe('isolated compatibility shell', () => {
     const { shell, window, webContents, handler, event } = fixture('darwin', mode)
     await shell.load()
     expect(handler(event(), 'state')).toMatchObject({ mode })
-    expect(webContents.loadFile).toHaveBeenCalledWith(expect.stringMatching(/native-ui\/compatibility-chrome\.html$/))
+    expect(webContents.loadFile).toHaveBeenCalledWith(expect.stringMatching(/native-ui[\\/]compatibility-chrome\.html$/))
     expect(window.contentView.addChildView).toHaveBeenCalledWith(shell.content)
     expect(shell.content).toMatchObject({ options: { webPreferences: {
       partition: 'persist:dsh-desktop-renderer', preload: '/desktop/preload.cjs',

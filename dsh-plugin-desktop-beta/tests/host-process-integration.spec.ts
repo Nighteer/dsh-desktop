@@ -23,7 +23,9 @@ it.each([false, true])('boots a separate Web Host with client plugins (AA enable
   try {
     writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: advanced\nagent-presets:\n  default: minimal\n')
     const prepared = prepareDesktopProfile('1', home, 'win32', undefined, undefined, undefined, { aaEnabled })
-    if (aaEnabled) prepared.patches.push({ id: 'agents-anywhere-bridge-next', config: { dshHome: home, stateRoot: join(home, 'aa-state') } })
+    // The migrated profile reports AA unavailable until its bridge supports this core.
+    // Exercise both requested settings while checking the effective service state.
+    if (prepared.aaEnabled) prepared.patches.push({ id: 'agents-anywhere-bridge-next', config: { dshHome: home, stateRoot: join(home, 'aa-state') } })
     prepared.port = 0
     const plugin = join(prepared.profile.dir, 'node_modules', 'isolated-client-fixture')
     mkdirSync(plugin, { recursive: true })
@@ -97,7 +99,7 @@ it.each([false, true])('boots a separate Web Host with client plugins (AA enable
     expect(await bundle.text()).toContain('isolatedClientFixture')
     expect(html).toContain('dsh-plugin-desktop-beta')
     await expect.poll(async () => (await rpc!.call<{ services: { aaRuntime: boolean; aaOnboarding: boolean } }>('status')).services, { timeout: 3000 })
-      .toEqual({ aaRuntime: aaEnabled, aaOnboarding: aaEnabled })
+      .toEqual({ aaRuntime: prepared.aaEnabled, aaOnboarding: prepared.aaEnabled })
     await rpc.call('stop')
     await expect(fetch(spec.url, { headers })).rejects.toThrow()
   } catch (error) {

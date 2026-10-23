@@ -11,7 +11,7 @@ export default defineConfig({
     // Keep it in Vitest's module graph so the builtin mock reaches its imports.
     server: {
       deps: {
-        inline: ['@deepseek-ai/dsh-host-directory-picker-browse', 'dsh-enterprise-ui'],
+        inline: ['@deepseek-ai/dsh-host-directory-picker-browse', 'dsh-enterprise-ui', 'dshmarket'],
       },
     },
     // Profile integration tests create a full package-junction closure; higher
