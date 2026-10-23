@@ -22,6 +22,8 @@ describe('universal macOS native runtime preparation', () => {
     expect(matches(`${root}/lib/python3.12/site-packages/numpy/.dylibs/libscipy_openblas64_.dylib`)).toBe(true)
     for (const arch of ['x64', 'arm64']) {
       expect(matches(`Contents/Resources/app/node_modules/@deepseek-ai/libreoffice-kit-darwin-${arch}/native.dylib`)).toBe(true)
+      expect(matches(`Contents/Resources/app/node_modules/sherpa-onnx-darwin-${arch}/sherpa-onnx.node`)).toBe(true)
+      expect(matches(`Contents/Resources/app/node_modules/@esbuild/darwin-${arch}/bin/esbuild`)).toBe(true)
     }
     expect(matches('Contents/Resources/unrelated/native.dylib')).toBe(false)
   })
