@@ -8,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -506,6 +507,33 @@ describe('desktop Host pnpm runtime', () => {
     expect(environment.PATH).toBe(`${first.pathDir}${pathDelimiter}${originalPath}`)
     second.dispose()
     expect(environment.PATH).toBe(`${first.pathDir}${pathDelimiter}${originalPath}`)
+  })
+
+  it('replaces legacy long Windows generation names without removing their files', () => {
+    const stateDir = join(temporaryDirectory(), 'runtime')
+    const environment: NodeJS.ProcessEnv = { Path: 'C:\\Windows' }
+    const first = installDesktopPnpmRuntime(options(stateDir, 'win32', environment))
+    first.dispose()
+    const firstRoot = dirname(first.pathDir)
+    const manifestText = readFileSync(join(firstRoot, '.generation.json'), 'utf8')
+    const manifest = JSON.parse(manifestText) as { contentHash: string }
+    expect(manifest.contentHash).toMatch(/^[0-9a-f]{64}$/u)
+    expect(basename(firstRoot)).toMatch(new RegExp(`^${manifest.contentHash.slice(0, 16)}-[0-9a-f]{32}$`))
+    const legacyRoot = join(dirname(firstRoot), `${manifest.contentHash}-12345678-1234-4123-8123-123456789abc`)
+    renameSync(firstRoot, legacyRoot)
+    const legacyPath = join(legacyRoot, 'bin')
+    environment.Path = `${legacyPath};C:\\Windows`
+
+    const second = installDesktopPnpmRuntime(options(stateDir, 'win32', environment))
+    expect(dirname(second.pathDir)).not.toBe(legacyRoot)
+    expect(environment.Path).toBe(`${second.pathDir};C:\\Windows`)
+    expect(readFileSync(join(legacyRoot, '.generation.json'), 'utf8')).toBe(manifestText)
+    expect(readFileSync(join(legacyPath, 'pnpm.cmd'), 'utf8')).toBe(readFileSync(second.pnpmShimPath, 'utf8'))
+    expect(readFileSync(join(dirname(second.pathDir), '.generation.json'), 'utf8')).toBe(manifestText)
+    second.dispose()
+    const third = installDesktopPnpmRuntime(options(stateDir, 'win32', environment))
+    expect(third.pathDir).toBe(second.pathDir)
+    third.dispose()
   })
 
   it('rejects symlinked state directories before changing PATH', () => {

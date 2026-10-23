@@ -46,6 +46,21 @@ function fuseWire(overrides: Partial<Record<FuseV1Options, FuseState>> = {}): Fu
 }
 
 describe('final Electron fuse verification', () => {
+  it('resolves an empty Windows directory target map only with explicit directory architectures', () => {
+    const built: ElectronArtifactBuildResult = {
+      outDir: '/build',
+      configuration: { productName: 'Enterprise', win: { target: 'dir:x64' } },
+      platformToTargets: new Map([[{ buildConfigurationKey: 'win' }, new Map()]]),
+    }
+    expect(resolveFinalPackagedRuntimeContexts(built, () => true)).toEqual([
+      expect.objectContaining({ arch: Arch.x64, appOutDir: join('/build', 'win-unpacked') }),
+    ])
+    for (const target of ['dir', 'nsis:x64']) {
+      expect(() => resolveFinalPackagedRuntimeContexts({
+        ...built, configuration: { ...built.configuration, win: { target } },
+      }, () => true)).toThrow('cannot determine requested Electron architecture')
+    }
+  })
   it('maps only requested platform and architecture keys to complete runtime contexts', () => {
     const expected = [
       join('/build', 'linux-unpacked', 'dsh-plugin-desktop-beta'),

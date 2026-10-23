@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -45,7 +46,7 @@ function installWebClient(
   const webDir = join(home, 'profiles', 'web')
   const template = PROFILE_TEMPLATES.web
   if (template === undefined) throw new Error('test requires the shipped Web template')
-  initProfile(webDir, template.bundles, template.patchReload)
+  initProfile(webDir, template.bundles)
   const packageDir = join(webDir, 'node_modules', ...packageName.split('/'))
   mkdirSync(packageDir, { recursive: true })
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({
@@ -80,7 +81,7 @@ describe('desktop profile composition', {
 }, () => {
   it('ships a PowerShell-backed minimal preset for Windows', () => {
     const minimalPreset = readFileSync(
-      join(shippedPresetRoot(), 'minimal', 'agent.cordis.yml'),
+      join(dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-web-app/package.json')), 'presets', 'minimal.patch.yml'),
       'utf8',
     )
 
@@ -96,12 +97,11 @@ describe('desktop profile composition', {
       'app.asar',
       'node_modules',
       '@deepseek-ai',
-      'dsh-agent-presets',
+      'dsh-agent-preset',
     )
-    const archivedPresetRoot = join(archivedPresets, 'presets')
+    const archivedPresetRoot = archivedPresets
     const skillPath = join(
       archivedPresetRoot,
-      'cordis',
       'skills',
       'cordis-plugin-development',
       'SKILL.md',
@@ -110,7 +110,7 @@ describe('desktop profile composition', {
     mkdirSync(archivedPresets, { recursive: true })
     mkdirSync(dirname(skillPath), { recursive: true })
     writeFileSync(join(archivedPresets, 'package.json'), JSON.stringify({
-      name: '@deepseek-ai/dsh-agent-presets',
+      name: '@deepseek-ai/dsh-agent-preset',
       exports: { './package.json': './package.json' },
     }) + '\n')
     writeFileSync(skillPath, '# Cordis plugin development\n')
@@ -121,7 +121,6 @@ describe('desktop profile composition', {
     expect(resolvedRoot).toBe(realpathSync(archivedPresetRoot))
     expect(readFileSync(join(
       resolvedRoot,
-      'cordis',
       'skills',
       'cordis-plugin-development',
       'SKILL.md',
@@ -341,16 +340,7 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/webserver',
       config: { host: '127.0.0.1', port: 43_120 },
     }))
-    expect(patches).toContainEqual(expect.objectContaining({
-      id: 'agent-presets',
-      config: expect.objectContaining({
-        roots: [
-          { path: shippedPresetRoot(), trust: 'system' },
-          { path: join(home, '.agent-presets'), trust: 'user' },
-        ],
-        includeUserRoot: false,
-      }),
-    }))
+    expect(composeEntries([prepared.patches]).find(row=>row.id==='preset-minimal')?.name).toBe('@deepseek-ai/dsh-agent-preset')
     expect(existsSync(join(
       prepared.profile.dir,
       'agent-preset-compat',
@@ -392,8 +382,8 @@ virtualStoreDirMaxLength: 60
       id: 'sandbox',
       name: '@deepseek-ai/dsh-sandbox-local',
     })
-    expect(rows.find(row => row.id === 'agent-presets')).toEqual(expect.objectContaining({
-      name: '@deepseek-ai/dsh-agent-presets',
+    expect(rows.find(row => row.id === 'preset-minimal')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-agent-preset',
     }))
     expect(rows.map(row => row.id)).not.toContain('desktop-windows-agent-presets')
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
@@ -570,11 +560,11 @@ virtualStoreDirMaxLength: 60
     expect(selected?.packageDir).not.toBe(oldProfileMarketDir)
     expect(JSON.parse(readFileSync(join(selected!.packageDir, 'package.json'), 'utf8'))).toMatchObject({
       name: 'dshmarket',
-      version: '1.38.1',
+      version: '1.66.44',
     })
   })
 
-  it('does not let community-management disables suppress a third-party market', () => {
+  it('honors user plugin disables independently of the selected market', () => {
     const home = temporaryHome()
     const packageName = 'third-party-plugin'
     installBundle(home, packageName, '- insert:\n    - id: third-party-marker\n      name: cordis:example\n')
@@ -599,7 +589,7 @@ virtualStoreDirMaxLength: 60
       managementStatePath,
       { requested: 'dsh-market', effective: 'dsh-market', legacyDefaulted: false },
     )
-    expect(composeEntries([external.patches])).toContainEqual(expect.objectContaining({
+    expect(composeEntries([external.patches])).not.toContainEqual(expect.objectContaining({
       id: 'third-party-marker',
     }))
 
@@ -698,7 +688,7 @@ virtualStoreDirMaxLength: 60
     const webDir = join(home, 'profiles', 'web')
     const template = PROFILE_TEMPLATES.web
     if (template === undefined) throw new Error('test requires the shipped Web template')
-    initProfile(webDir, template.bundles, template.patchReload)
+    initProfile(webDir, template.bundles)
     writeFileSync(join(webDir, 'cordis.patch.yml'), [
       '- id: ui-layout',
       "  name: '@deepseek-ai/dsh-client-ui-layout'",
@@ -760,9 +750,7 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'web-runtime')).toEqual(expect.objectContaining({
       config: expect.objectContaining({ openBrowser: false }),
     }))
-    expect(rows.find(row => row.id === 'settings')).toEqual(expect.objectContaining({
-      config: expect.objectContaining({ dshHome: home }),
-    }))
+    expect(rows.find(row => row.id === 'settings')?.name).toBe('@deepseek-ai/dsh-settings')
     expect(rows.find(row => row.id === 'ui-layout')?.disabled).toBe(true)
     expect(rows.find(row => row.id === 'ui-sidebar')?.disabled).toBe(false)
     expect(rows.find(row => row.id === 'ui-conversation')?.disabled).toBe(false)
@@ -847,7 +835,7 @@ virtualStoreDirMaxLength: 60
       openBrowser: false,
       networkExposure: 'loopback',
     })
-    expect(desktopShellModeFromSettings({ unrelated: { enabled: true } })).toBe('compatibility')
+    expect(desktopShellModeFromSettings({ unrelated: { enabled: true } })).toBe(process.platform==='win32'?'advanced':'compatibility')
   })
 
   it('treats legacy LAN exposure as browser access only in compatibility mode', () => {
@@ -993,17 +981,11 @@ virtualStoreDirMaxLength: 60
       id: 'sandbox',
       name: '@deepseek-ai/dsh-sandbox-local',
     })
-    expect(rows.find(row => row.id === 'agent-presets')).toEqual(expect.objectContaining({
-      name: '@deepseek-ai/dsh-agent-presets',
-      config: expect.objectContaining({
-        roots: [
-          { path: shippedPresetRoot(), trust: 'system' },
-          { path: join(home, '.agent-presets'), trust: 'user' },
-        ],
-        includeUserRoot: false,
-      }),
+    expect(rows.find(row => row.id === 'preset-minimal')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-agent-preset',
+      config: expect.objectContaining({id:'minimal'}),
     }))
-    expect(rows.find(row => row.id === 'agent-presets')?.disabled).toBeFalsy()
+    expect(rows.find(row => row.id === 'preset-minimal')?.disabled).toBeFalsy()
     expect(rows.map(row => row.id)).not.toContain('desktop-windows-agent-presets')
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',
@@ -1176,22 +1158,19 @@ virtualStoreDirMaxLength: 60
 })
 
 describe('bundled Agents Anywhere', () => {
-  it('loads the shipped bundle only after explicit opt-in, through its declared bundle and physical Connector paths', () => {
+  it('does not resolve the incompatible adapter even with a previously saved opt-in', () => {
     const home = temporaryHome()
     const disabled = prepareDesktopProfile('1', home)
     expect(disabled.aaEnabled).toBe(false)
     expect(composeEntries([disabled.patches]).some(row => row.name === '@agents-anywhere/dsh-bridge-next')).toBe(false)
     const enabled = prepareDesktopProfile('1', home, process.platform, undefined, undefined, undefined, { aaEnabled: true })
     const aa = composeEntries([enabled.patches]).filter(row => row.name === '@agents-anywhere/dsh-bridge-next' && !row.disabled)
-    expect(aa).toHaveLength(1)
-    expect(enabled.profile.layers.some(layer => layer.packageName === '@agents-anywhere/dsh-bridge-next')).toBe(true)
-    expect(aa[0]?.config).toMatchObject({ dshHome: home })
-    expect(aa[0]?.config).not.toHaveProperty('stateRoot')
-    const config = aa[0]?.config as { connectorSourceDir: string }
-    expect(readFileSync(join(config.connectorSourceDir, 'pyproject.toml'), 'utf8')).toContain('anywhere-cli')
+    expect(aa).toHaveLength(0)
+    expect(enabled.profile.layers.some(layer => layer.packageName === '@agents-anywhere/dsh-bridge-next')).toBe(false)
+    expect(enabled.aaFailure).toBeUndefined()
     expect(prepareDesktopProfile('1', home).aaEnabled).toBe(false)
   })
-  it('preserves the selected bundle config instead of rebuilding its plugin row', () => {
+  it('preserves legacy bundle files and config while excluding its plugin row', () => {
     const home = temporaryHome()
     prepareDesktopProfile('1', home)
     const packageDir = installBundle(home, '@agents-anywhere/dsh-bridge-next', [
@@ -1209,9 +1188,10 @@ describe('bundled Agents Anywhere', () => {
     writeFileSync(join(packageDir, 'lib', 'bundled-connector', 'pyproject.toml'), '[project]')
     const enabled = prepareDesktopProfile('1', home, process.platform, undefined, undefined, undefined, { aaEnabled: true })
     expect(enabled.aaFailure).toBeUndefined()
-    expect(enabled.profile.layers.find(layer => layer.packageName === '@agents-anywhere/dsh-bridge-next')?.packageDir).toBe(packageDir)
-    const row = composeEntries([enabled.patches]).find(row => row.name === '@agents-anywhere/dsh-bridge-next')!
-    expect(row.config).toMatchObject({ apiBaseUrl: 'https://aa.example.com', uvPath: '/custom-uv', stateRoot: '/custom-aa-state', dshHome: home })
+    expect(enabled.profile.layers.some(layer => layer.packageName === '@agents-anywhere/dsh-bridge-next')).toBe(false)
+    expect(composeEntries([enabled.patches]).some(row => row.name === '@agents-anywhere/dsh-bridge-next')).toBe(false)
+    expect(readFileSync(join(packageDir,'native.patch.yml'),'utf8')).toContain('stateRoot: "/custom-aa-state"')
+    expect(readFileSync(join(packageDir,'lib','bundled-connector','pyproject.toml'),'utf8')).toBe('[project]')
   })
   it.each(['missing-patch', 'invalid-yaml', 'invalid-row', 'missing-payload'])('keeps Desktop bootable when the optional AA bundle has %s', failure => {
     const home = temporaryHome()
@@ -1222,7 +1202,7 @@ describe('bundled Agents Anywhere', () => {
     if (failure === 'missing-patch') rmSync(join(packageDir, 'cordis.patch.yml'))
     const prepared = prepareDesktopProfile('1', home, process.platform, undefined, undefined, undefined, { aaEnabled: true })
     expect(prepared.aaEnabled).toBe(false)
-    expect(prepared.aaFailure).toBeTruthy()
+    expect(prepared.aaFailure).toBeUndefined()
     expect(composeEntries([prepared.patches]).some(row => row.name === '@agents-anywhere/dsh-bridge-next')).toBe(false)
     expect(composeEntries([prepared.patches]).some(row => row.id === 'settings')).toBe(true)
     const disabled = prepareDesktopProfile('1', home)
@@ -1235,7 +1215,7 @@ describe('bundled Agents Anywhere', () => {
     writeFileSync(join(home, 'cordis.patch.yml'), '- insert:\n    - id: aa-group\n      group: true\n      config:\n        - id: other-aa\n          name: "@agents-anywhere/dsh-bridge-next"\n')
     const enabled = prepareDesktopProfile('1', home, process.platform, undefined, undefined, undefined, { aaEnabled: true })
     expect(enabled.aaEnabled).toBe(false)
-    expect(enabled.aaFailure).toContain('conflicting AA')
+    expect(enabled.aaFailure).toBeUndefined()
     expect(JSON.stringify(enabled.patches)).not.toContain('@agents-anywhere/dsh-bridge-next')
   })
   it('does not let a user patch enable AA while Desktop selection is off', () => {

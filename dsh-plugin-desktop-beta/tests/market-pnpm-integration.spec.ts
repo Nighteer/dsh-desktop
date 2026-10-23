@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
-import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
 import type { SubprocessHandle, SubprocessRuntime, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { describe, expect, it, vi } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
@@ -185,7 +184,8 @@ describe('desktop pnpm and community market integration', () => {
       })
       ctx.provide('desktopPnpmBootstrap', selectedBootstrap)
       ctx.provide('subprocess', { spawn } as unknown as SubprocessRuntime)
-      await ctx.plugin(FileSettingsProvider, { path: settingsPath, watch: false })
+      ctx.provide('settings',{describe:()=>[{ns:'community-market',value:{sources:[]}}],update:async()=>{}} as never)
+      ctx.provide('loader',{entries:()=>[]} as never)
       await ctx.plugin({ name: desktopPnpmName, inject: desktopPnpmInject, apply: applyDesktopPnpm })
       await ctx.plugin({ name: market.name, inject: market.inject, apply: market.apply })
 

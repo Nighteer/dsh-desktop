@@ -40,11 +40,10 @@ function createHarness() {
 
   const context = {
     logger: { error: vi.fn() },
+    loader: {entries:()=>[]},
     settings: {
-      register: vi.fn(() => ({
-        get: () => settings,
-        update: async (patch: Record<string, unknown>) => { settings = { ...settings, ...patch } },
-      })),
+      describe:()=>[{ns:'community-market',value:settings}],
+      update:async (_ns:string,patch:Record<string,unknown>)=>{settings={...settings,...patch}},
     },
     webServer: {
       port: 43_120,

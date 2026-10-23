@@ -60,10 +60,12 @@ describe('Desktop product copy', () => {
 
   it('ships localized native update and failure dialogs', () => {
     const copy = desktopNativeCopy('zh')
-    expect(copy.updateCheckFailedTitle).toBe('无法检查更新')
+    expect(copy.updateCheckFailedTitle).toBe('LETS Desktop · 检查更新')
     expect(copy.terminalErrorTitle).toBe('无法打开 DSH 终端')
     expect(copy.diagnosticsErrorTitle).toBe('无法导出诊断信息')
-    expect(copy.updateAvailableMessage('2.1.0')).toBe('DSH Desktop 2.1.0 已可用。')
+    expect(copy.updateAvailableMessage('2.1.0')).toBe('LETS Desktop 2.1.0 已可用')
+    expect(copy.updateSource).toContain('当前企业管理后台发布')
+    expect(desktopNativeCopy('en').updateSource).toContain('enterprise administrator')
   })
 
   it('explains cross-channel Profile risk and routes users to Profile selection', () => {

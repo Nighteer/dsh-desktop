@@ -7,6 +7,7 @@ import {
   type DesktopSetupWizardInput,
 } from '../src/setup-wizard-contract.ts'
 import { desktopSetupWizardCopy } from '../src/setup-wizard-copy.ts'
+import { DESKTOP_PRODUCT_NAME } from '../src/product-identity.ts'
 
 const input: DesktopSetupWizardInput = {
   appVersion: '2.0.6-beta.1',
@@ -75,15 +76,19 @@ describe('Desktop Setup Wizard copy and contract', () => {
   it('introduces first-time setup for the current Profile before showing settings', () => {
     const english = desktopSetupWizardCopy('en')
     const chinese = desktopSetupWizardCopy('zh')
-    expect(chinese.welcomeTitle).toBeTruthy()
-    expect(chinese.welcomeBody).toContain('Profile')
+    expect(chinese.welcomeTitle).toBe(`欢迎使用 ${DESKTOP_PRODUCT_NAME}`)
+    expect(chinese.profile).toBe('当前工作环境')
+    expect(chinese.welcomeBody).toContain('工作环境')
     expect(chinese.firstProfileSetup).toContain('首次')
     expect(chinese.firstProfileSetup).toContain('桌面设置')
+    expect(chinese.firstProfileSetup).toContain('Profile')
     expect(chinese.startSetup).toBe('开始设置')
-    expect(english.welcomeTitle).toBeTruthy()
-    expect(english.welcomeBody).toContain('Profile')
+    expect(english.welcomeTitle).toBe(`Welcome to ${DESKTOP_PRODUCT_NAME}`)
+    expect(english.profile).toBe('Current Profile')
+    expect(english.welcomeBody).toContain('workspace')
     expect(english.firstProfileSetup).toMatch(/first(?:-time| time)/iu)
     expect(english.firstProfileSetup).toMatch(/Desktop setup/iu)
+    expect(english.firstProfileSetup).toContain('Profile')
     expect(english.startSetup).toBe('Start setup')
   })
 

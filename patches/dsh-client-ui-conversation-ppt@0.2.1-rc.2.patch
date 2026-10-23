@@ -1,0 +1,59 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -17810,5 +17810,6 @@
+ 						}
+ 					}),
+-					renderSlot("conversation.hero.agentPreset", {}),
++					renderSlot("conversation.hero.agentPreset", {}),
++					renderSlot("conversation.hero.modeActions", { session }),
+ 					sessionId === void 0 ? null : (0, react_jsx_runtime.jsx)("div", {
+ 						className: ConversationRoot_module_css_default.heroOptions,
+@@ -17841,5 +17842,6 @@
+ 					hero && heroWorkspaceRow,
+ 					zone !== void 0 && renderSlot("conversation.input.dock", zone),
+-					inputBar
++					inputBar,
++					hero && renderSlot("conversation.hero.dock", { session })
+ 				]
+ 			});
+@@ -18756,5 +18758,6 @@
+ 		*/
+ 		const InputBar = (0, react.memo)(function InputBar({ useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments, retryFileUpload, toggleCommandMenu, stop, t, renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher, useStopShortcut, useProjection, sessionId, variant, disabled: inert = false, blocked, workspacePickerOpen = false, onRequestWorkspace, placeholder, accessory }) {
+-			const input = useInput((s) => s);
++			const input = useInput((s) => s);
++			const session = useSession((s) => s);
+ 			const notice = useNotices((s) => s);
+ 			const busyEnter = useBusyEnter((s) => s);
+@@ -19004,5 +19007,6 @@
+ 								children: accessory
+ 							}),
+-							renderSlot("conversation.input.attachments", {
++							renderSlot("conversation.input.accessory", { session }),
++							renderSlot("conversation.input.attachments", {
+ 								attachments,
+ 								canAcceptDrop,
+@@ -19162,5 +19166,5 @@
+ 						className: InputBar_module_css_default.dock,
+ 						"data-composer-dock": true,
+-						children: [variant === "composer" && input !== void 0 && sessionId !== void 0 ? renderSlot("conversation.composer.dock", {}) : null, activity ? null : (0, react_jsx_runtime.jsx)(ContextMeter, {
++						children: [variant === "composer" && input !== void 0 && sessionId !== void 0 ? renderSlot("conversation.composer.dock", { session }) : null, activity ? null : (0, react_jsx_runtime.jsx)(ContextMeter, {
+ 							useProjection,
+ 							t
+@@ -19760,5 +19764,7 @@
+ 						scope: "root"
+ 					},
+-					"conversation.hero.agentPreset": {
++					"conversation.hero.modeActions": { kind: "list", scope: "session-maybe" },
++					"conversation.hero.dock": { kind: "list", scope: "session-maybe" },
++					"conversation.hero.agentPreset": {
+ 						kind: "single",
+ 						scope: "session-maybe"
+@@ -19882,5 +19888,6 @@
+ 				locale: NS,
+ 				children: {
+-					"conversation.input.attachments": {
++					"conversation.input.accessory": { kind: "list", scope: "session-maybe" },
++					"conversation.input.attachments": {
+ 						kind: "single",
+ 						scope: "session-maybe"

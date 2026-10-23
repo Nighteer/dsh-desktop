@@ -20,21 +20,13 @@ const THIRD_PARTY_DEPENDENCY_NAME = 'dsh-desktop-loader-smoke-dependency'
 const PRODUCT_VERSION = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ).version
-const AUTHENTICATION_TOKEN = Buffer.alloc(32, 3).toString('base64url')
 let ordinaryBrowserEnabled = false
 const BROWSER_ACCESS = Object.freeze({
   get ordinaryBrowserEnabled() { return ordinaryBrowserEnabled },
   rendererHeader: Object.freeze({
     name: 'x-dsh-desktop-renderer',
-    value: AUTHENTICATION_TOKEN,
+    value: Buffer.alloc(32, 1).toString('base64url'),
   }),
-  authenticatedUrl(baseUrl) {
-    const url = new URL(baseUrl)
-    url.pathname = '/'
-    url.search = ''
-    url.searchParams.set('token', AUTHENTICATION_TOKEN)
-    return url.href
-  },
   setOrdinaryBrowserEnabled(enabled) { ordinaryBrowserEnabled = enabled },
 })
 const LAN_HTTPS_SNAPSHOT = Object.freeze({
@@ -51,6 +43,7 @@ const LAN_HTTPS = Object.freeze({
   async setEnabled() { return LAN_HTTPS_SNAPSHOT },
   async stop() { return LAN_HTTPS_SNAPSHOT },
 })
+const AUTHENTICATION_TOKEN = Buffer.alloc(32, 3).toString('base64url')
 const RUNNER_ENVIRONMENT_NAMES = new Set([
   'ELECTRON_RUN_AS_NODE',
   'NPM_CONFIG_RUNTIME',
@@ -153,7 +146,7 @@ try {
     BIN_NAME,
     prepared.rootConfig,
     [{ insert: [
-      { id: 'desktop-shell', name: 'dsh-plugin-desktop' },
+      { id: 'desktop-shell', name: 'dsh-plugin-desktop',config:{mode:'compatibility'} },
       { id: 'community-market', name: 'dsh-community-market' },
       { id: 'third-party-smoke', name: THIRD_PARTY_NAME },
     ] }],
@@ -179,18 +172,13 @@ try {
         },
         requestRejection() { return undefined },
       })
-      host.provide('webRuntime', {})
+      host.provide('webApp', {})
       host.provide('appExit', () => {})
       host.provide('settings', {
-        register() {
-          return {
-            get: () => ({ mode: 'compatibility' }),
-            watch: () => () => {},
-            update: async () => {},
-            replace: async () => {},
-          }
-        },
+        describe:()=>[{ns:'desktop-shell',value:{mode:'compatibility',macosMaterial:'transparent',windowsMaterial:'off',port:43120,openBrowser:false,networkExposure:'loopback',logLevel:'info'}},{ns:'community-market',value:{sources:[]}}],
+        update:async()=>{},
       })
+
     },
     prepared.bareModuleBaseUrl,
   )

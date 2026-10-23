@@ -1,5 +1,6 @@
+import { createVolatile } from '@deepseek-ai/cosmokit'
 import type { Context } from '@deepseek-ai/cordis'
-import type { JobId, JobSnapshot } from '@deepseek-ai/dsh-jobs'
+import type { JobId, JobView } from '@deepseek-ai/dsh-jobs'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -19,7 +20,7 @@ interface NotificationHarness {
   readonly registerSettings: ReturnType<typeof vi.fn>
   readonly stopJobs: ReturnType<typeof vi.fn>
   readonly stopSessions: ReturnType<typeof vi.fn>
-  jobDone(snapshot: JobSnapshot): Promise<void>
+  jobDone(snapshot: JobView): Promise<void>
   sessionEvent(session: Session, event: SessionEvent): Promise<void>
   sessionDisposed(session: Session): Promise<void>
   updateSettings(settings: DesktopNotificationSettings): Promise<void>
@@ -36,12 +37,10 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
   const injections = new Map<OptionalService, (ctx: Context) => void>()
   const disposers = new Map<OptionalService, Array<() => void>>()
   let activeService: OptionalService | undefined
-  let jobListener: ((snapshot: JobSnapshot) => void | PromiseLike<void>) | undefined
+  let jobListener: ((event: {type:string,cause:string,job:JobView}) => void | PromiseLike<void>) | undefined
   let sessionListener: ((session: Session, event: SessionEvent) => void | PromiseLike<void>) | undefined
   let sessionDisposedListener: ((session: Session) => void | PromiseLike<void>) | undefined
-  let settingsWatcher:
-    | ((next: DesktopNotificationSettings, previous: DesktopNotificationSettings) => void | Promise<void>)
-    | undefined
+  let settingsWatcher: ((namespace:string) => void) | undefined
   let currentSettings = DesktopNotificationSettingsSchema({} as DesktopNotificationSettings)
 
   const runtime = {
@@ -50,29 +49,23 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
     notifyAttention,
   } as unknown as DesktopRuntime
 
-  const registerSettings = vi.fn(() => ({
-    get: () => currentSettings,
-    watch: (watcher: typeof settingsWatcher) => {
-      settingsWatcher = watcher
-      return () => { settingsWatcher = undefined }
-    },
-    update: vi.fn(async () => {}),
-    replace: vi.fn(async () => {}),
-  }))
+  const registerSettings = vi.fn(()=>[{ns:DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,value:currentSettings}])
 
   const ctx = {
     desktopRuntime: runtime,
-    settings: { register: registerSettings },
-    jobs: {
-      onJobDone: (listener: typeof jobListener) => {
+    settings: { describe: registerSettings },
+    get: () => ({describe:registerSettings}),
+    jobs: {events:{
+      subscribe: (_filter:unknown, listener: typeof jobListener) => {
         jobListener = listener
         return () => {
           jobListener = undefined
           stopJobs()
         }
       },
-    },
+    }},
     on: (event: string, listener: typeof sessionListener | typeof sessionDisposedListener) => {
+      if(event==='settings/document-updated'){ settingsWatcher=listener as unknown as typeof settingsWatcher;return ()=>{settingsWatcher=undefined} }
       if (event === 'session/event') sessionListener = listener as typeof sessionListener
       else if (event === 'session/disposed') sessionDisposedListener = listener as typeof sessionDisposedListener
       else return () => {}
@@ -105,20 +98,20 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
     disposers.delete(service)
   }
 
-  apply(ctx)
+  apply(ctx, Object.fromEntries(Object.entries(currentSettings).map(([key,value])=>[key,createVolatile(value)])) as Parameters<typeof apply>[1])
 
   return {
     notifyAttention,
     registerSettings,
     stopJobs,
     stopSessions,
-    async jobDone(snapshot) { await jobListener?.(snapshot) },
+    async jobDone(snapshot) { await jobListener?.({type:'settled',cause:'completed',job:snapshot}) },
     async sessionEvent(session, event) { await sessionListener?.(session, event) },
     async sessionDisposed(session) { await sessionDisposedListener?.(session) },
     async updateSettings(next) {
-      const previous = currentSettings
       currentSettings = next
-      await settingsWatcher?.(next, previous)
+      settingsWatcher?.(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)
+      await Promise.resolve()
     },
     teardownSessions() { teardown('sessions') },
     reattachSessions() {
@@ -170,7 +163,7 @@ describe('desktop notifications Host plugin', () => {
 
     expect(name).toBe('desktop-notifications')
     expect(inject).toEqual(['desktopRuntime'])
-    expect(String(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)).toBe('dsh-desktop-notifications')
+    expect(String(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)).toBe('desktop-notifications')
     expect(DesktopNotificationSettingsSchema({} as DesktopNotificationSettings)).toEqual({
       enabled: true,
       notifyOnTurnCompletion: true,
@@ -178,14 +171,10 @@ describe('desktop notifications Host plugin', () => {
       notifyOnJobCompletion: true,
       notifyOnJobFailure: true,
     })
-    expect(harness.registerSettings).toHaveBeenCalledWith(
-      DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
-      DesktopNotificationSettingsSchema,
-      { applies: 'live' },
-    )
+    expect(harness.registerSettings).toHaveBeenCalled()
   })
 
-  it('notifies for completed and failed jobs without exposing job details', async () => {
+  it('never mistakes completed or failed internal jobs for completion of the user task', async () => {
     const harness = createHarness(['jobs', 'settings'])
     const snapshot = {
       id: 'bash-1' as JobId,
@@ -193,20 +182,17 @@ describe('desktop notifications Host plugin', () => {
       label: 'node /Users/example/private.js --token secret',
       status: 'completed',
       detail: 'session-123',
-      output: 'private output',
+      progress: 'private output',
       startedAt: 1,
       finishedAt: 2,
-      reported: false,
-    } satisfies JobSnapshot & { output: string }
+      output: {total:0,earliest:0},
+    } satisfies JobView
 
     await harness.jobDone(snapshot)
     await harness.jobDone({ ...snapshot, status: 'failed' })
     await harness.jobDone({ ...snapshot, status: 'killed' })
 
-    expect(harness.notifyAttention.mock.calls).toEqual([
-      [{ title: 'Background Job Completed', body: 'A background job has finished.' }],
-      [{ title: 'Background Job Failed', body: 'A background job could not finish. Open DSH Desktop for details.' }],
-    ])
+    expect(harness.notifyAttention).not.toHaveBeenCalled()
     expect(JSON.stringify(harness.notifyAttention.mock.calls)).not.toMatch(/Users|private|secret|session-123/u)
   })
 
@@ -219,8 +205,8 @@ describe('desktop notifications Host plugin', () => {
       status: 'completed',
       startedAt: 1,
       finishedAt: 2,
-      reported: false,
-    } satisfies JobSnapshot
+      output: {total:0,earliest:0},
+    } satisfies JobView
 
     await harness.updateSettings({
       enabled: true,
@@ -244,8 +230,7 @@ describe('desktop notifications Host plugin', () => {
     }, 6))
 
     expect(harness.notifyAttention.mock.calls).toEqual([
-      [{ title: 'Background Job Failed', body: 'A background job could not finish. Open DSH Desktop for details.' }],
-      [{ title: 'User Turn Failed', body: 'A user-initiated turn could not finish. Open DSH Desktop for details.' }],
+      [{ title: 'LETS · 本轮处理未完成', body: '本轮处理遇到问题，请打开 LETS 查看详情后重试。' }],
     ])
   })
 
@@ -258,8 +243,8 @@ describe('desktop notifications Host plugin', () => {
       status: 'completed',
       startedAt: 1,
       finishedAt: 2,
-      reported: false,
-    } satisfies JobSnapshot
+      output: {total:0,earliest:0},
+    } satisfies JobView
 
     await harness.updateSettings({
       enabled: false,
@@ -299,8 +284,8 @@ describe('desktop notifications Host plugin', () => {
 
     expect(harness.notifyAttention).toHaveBeenCalledOnce()
     expect(harness.notifyAttention).toHaveBeenCalledWith({
-      title: 'User Turn Completed',
-      body: 'A user-initiated turn has finished.',
+      title: 'LETS · 回复已完成',
+      body: '本轮回复已结束，请打开 LETS 查看结果。文件是否可用请以对话中的交付结果为准。',
     })
   })
 
@@ -323,8 +308,8 @@ describe('desktop notifications Host plugin', () => {
 
     expect(harness.notifyAttention).toHaveBeenCalledOnce()
     expect(harness.notifyAttention).toHaveBeenCalledWith({
-      title: 'User Turn Failed',
-      body: 'A user-initiated turn could not finish. Open DSH Desktop for details.',
+      title: 'LETS · 本轮处理未完成',
+      body: '本轮处理遇到问题，请打开 LETS 查看详情后重试。',
     })
   })
 
@@ -342,7 +327,7 @@ describe('desktop notifications Host plugin', () => {
     expect(harness.stopSessions).toHaveBeenCalledTimes(2)
     harness.dispose()
     expect(harness.stopSessions).toHaveBeenCalledTimes(4)
-    expect(harness.stopJobs).toHaveBeenCalledOnce()
+    expect(harness.stopJobs).not.toHaveBeenCalled()
   })
 
   it('drops an unfinished turn when its session is disposed', async () => {

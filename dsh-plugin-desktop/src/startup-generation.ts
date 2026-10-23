@@ -1,12 +1,14 @@
 /** Resource ownership for one immutable Desktop startup generation. */
 
 import { randomUUID } from 'node:crypto'
+import type { DesktopTaskControl } from './desktop-task-control.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const DEFAULT_QUIESCE_TIMEOUT_MS = 5_000
 
 /** Minimal Host lifetime consumed by the startup generation. */
 export interface DesktopStartupGenerationHost {
+  readonly tasks?: DesktopTaskControl | undefined
   readonly fiber: {
     dispose(): Promise<void>
   }
@@ -36,6 +38,8 @@ export class DesktopStartupGeneration {
   private hostDisposeTask: Promise<boolean> | undefined
   private releaseTask: Promise<void> | undefined
   private released = false
+  private taskControl: DesktopTaskControl | undefined
+  get tasks(): DesktopTaskControl | undefined { return this.released ? undefined : this.taskControl ?? this.host?.tasks }
 
   constructor(private readonly options: DesktopStartupGenerationOptions) {
     this.quiesceTimeoutMs = options.quiesceTimeoutMs ?? DEFAULT_QUIESCE_TIMEOUT_MS
@@ -45,12 +49,13 @@ export class DesktopStartupGeneration {
   }
 
   /** Bind the only Cordis Host that may own this generation's effects. */
-  bindHost(host: DesktopStartupGenerationHost): void {
+  bindHost(host: DesktopStartupGenerationHost, tasks?: DesktopTaskControl): void {
     this.assertActive()
     if (this.host !== undefined && this.host !== host) {
       throw new Error(`${BIN_NAME}: startup generation already owns another Host`)
     }
     this.host = host
+    if (tasks !== undefined) this.taskControl = tasks
   }
 
   /** Register one process-local resource and return its idempotent Host effect. */

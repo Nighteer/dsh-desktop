@@ -2,13 +2,15 @@
 
 ## 总览
 
-DSH Desktop 是一个薄的 Electron 宿主。它在 Electron main 进程中启动官方 DSH Host，Host 再通过 HTTP/WebSocket Web carrier 提供普通 Web UI；carrier 默认只监听回环地址，也可在用户明确确认风险后向局域网开放。Desktop 没有另造一条 renderer IPC 插件系统，也不把 Electron API 暴露给页面。
+LETSDSH Desktop 是一个薄的 Electron 宿主。Electron main 进程负责原生窗口、托盘和生命周期，默认在独立的 Electron utility process 中启动官方 DSH Host；两者只通过有界 RPC 交换原生能力调用。Host 再通过 HTTP/WebSocket Web carrier 提供普通 Web UI；carrier 默认只监听回环地址，也可在用户明确确认风险后向局域网开放。Desktop 没有另造一套 renderer 插件系统，也不向页面暴露原始 Electron API。
 
 ```mermaid
 flowchart LR
   User[用户] --> Native[Electron main / tray / window]
   Native --> Launcher[Profile launcher]
-  Launcher --> Host[Host Cordis generation]
+  Launcher --> HostProcess[DSH Host utility process]
+  Native <-->|有界原生 RPC| HostProcess
+  HostProcess --> Host[Host Cordis generation]
   Host --> Carrier[HTTP + WebSocket Web carrier]
   Carrier --> Renderer[Sandboxed Web renderer]
   Host --> Upstream[Upstream DSH services]
@@ -20,10 +22,22 @@ flowchart LR
 
 ## 启动顺序
 
+企业构建在以下流程前先运行原生登录窗口，在线确认身份并完成首次改密，再选择企业实例与用户独立的数据目录和浏览器分区。凭证只在 main 管理；Host 不持有长期登录凭证。会话失效时先锁定窗口，再通过现有协调器停止 Host。详见[企业开发与验收](enterprise-development.md)。
+
+`dsh-enterprise-server`、`dsh-enterprise-admin`、`dsh-enterprise-contracts` 分别拥有账号 API、管理网页与共享接口，均属外层 Yarn 工作区。它们不修改上游，不随普通 Desktop 自动启动；登录组件被原生窗口复用，服务端使用 PostgreSQL 并再次校验所有授权。
+
+企业知识库模块由服务端保存加密的 WeKnora 密钥、库绑定与授权，main 只通过既有回环 capability 转接固定检索接口。桌面自有槽位管理会话选库，Host 在公开 `agent/pre-step` 扩展点注入只读检索来源；回答仍使用当前企业模型。结果释放前复核授权，不修改上游文档或 Harness 子模块。详见[企业知识库](enterprise-knowledge.md)。
+
+`dsh-ppt-runtime` 是同一根 Yarn 管理的私有 `dsh-ppt` 工作区，维护固定来源的 PPT 编译器、模板生成器与会话级客户端。Profile 在当前账号 home 内给它分配独立 `ppt/` 根目录；安全模式不加载它。两版发布会话包用各自补丁补充 PPT 槽位，不修改上游子模块。详见[桌面体验与 PPT](desktop-refinements.md)。
+
+企业模型模块在服务端拥有供应商密钥加密、模型登记、员工/部门授权与 SSE 网关。桌面 main 用本机回环通道转接，Host 仅通过 IPC 获得本次运行 capability，不持有登录凭证或供应商密钥；企业内存组合替换自配适配器。活跃调用复核授权并在撤权、停用或退出后中止。详见[企业模型](enterprise-models.md)。
+
+企业应用模块独立维护网页登记、允许跳转站点及员工/部门授权。桌面自有客户端扩展通过侧栏／主面板槽位提供入口，main 经专用 IPC 校验后在同窗口的隔离 WebContentsView 中加载网页，不传递企业凭证、不把网页载入 Host。网页存储按企业、员工及应用分区，活跃／隐藏页面复核授权并在撤权、服务失败或退出时关闭；目标系统仍负责自己的登录与数据权限。详见[企业应用](enterprise-applications.md)。
+
 1. Electron 获取单实例锁，并读取 Desktop 私有的 profile/mode 状态。
 2. Launcher 准备激活 profile，但不会为了列举 profile 而改写用户 profile。
-3. Launcher 提供当前 generation 的 native runtime、`desktopProfiles` bootstrap 和内置 pnpm 环境。
-4. Host Cordis root 启动 Loader entries。Desktop service 在第三方插件可读取前注册。
+3. Launcher 准备当前 generation 的 native runtime、`desktopProfiles` bootstrap 和内置 pnpm 环境，并默认创建 DSH Host utility process。设置 `DSH_DESKTOP_ISOLATED_HOST=0` 只保留为回退诊断路径。
+4. utility process 中的 Host Cordis root 启动 Loader entries。Desktop service 在第三方插件可读取前注册；需要窗口、托盘或系统对话框时，经有界 RPC 调回 Electron main。
 5. 官方 `dsh-base`、`dsh-web-app` 和 profile 中的第三方 bundle 组成 Web carrier。
 6. Host 默认绑定 loopback，也可按已确认的设置绑定所有网络接口；Electron 创建 BrowserWindow 并从 loopback 地址加载同源页面。
 7. Web surface 成功加载后才创建托盘并提交 profile 的 last-known-good 状态。
@@ -35,7 +49,7 @@ flowchart LR
 - **Upstream Host**：agent、model、tool、session、settings、webServer 和 subprocess 等官方能力。
 - **Desktop Host**：窗口、托盘、profile、终端、更新，以及对第三方开放的两个 service。
 - **Web Client**：官方 Web UI 和第三方浏览器界面。它通过共享 Web carrier 工作，不直接调用 Electron。
-- **Native runtime**：Electron BrowserWindow、系统托盘、文件/网络/安装器适配。`desktopRuntime` 只供 Desktop 自有 row 使用。
+- **Native runtime**：位于 Electron main，拥有 BrowserWindow、系统托盘、文件/网络/安装器适配。`desktopRuntime` 只供 Desktop 自有 row 使用；隔离 Host 通过显式 RPC 桥使用这些能力。
 
 兼容模式的 Client face 会校验环境，并且只通过 overlay slot 加入一条独立的 36 像素 Desktop frame；官方 layout、root、sidebar 与 conversation 作为完全无关的内容 viewport 从它下方开始。扩展窗口会禁用官方 root layout，安装自己独立注册的 Desktop layout/sidebar surface，并在倒 L 材质 frame 中继续承载官方 sidebar、conversation 与 details occupant。增强模式保留独立 root registration 与最初的紧凑内部 caption 几何。macOS 与 Windows 会按系统能力使用原生材质，同时不改变上游 occupant slot 的所有权。
 
@@ -57,7 +71,7 @@ Launcher 私有的 `desktopRuntime`、`desktopPnpmBootstrap`、Electron executab
 
 ## 打包与运行时闭包
 
-发布包使用 Electron Builder 和 `app.asar`，但需要物理 unpack 的依赖（例如 pnpm、node-pty、Windows ACL/native 文件）会放在 `app.asar.unpacked`。Packaged runtime gate 会检查 ASAR 入口和物理运行时入口，profile fallback 不能把符号链接指向无法被 Node 解析的虚拟 ASAR 路径。
+发布包使用 Electron Builder，但稳定版与 Beta 当前都明确关闭 ASAR。根 manifest、Desktop runtime、pnpm、node-pty 和 Windows ACL/native 文件以普通文件形式位于 `resources/app/`。Packaged runtime gate 会检查这些物理运行时入口，profile fallback 不得指向不存在或无法由 Node 解析的路径。
 
 根 workspace 使用 Yarn；固定的 `deepseek-harness/` 子模块保持上游自己的 pnpm workspace。稳定版与 Beta 的桌面代码分别位于 `dsh-plugin-desktop/` 和 `dsh-plugin-desktop-beta/`，共享功能由变体同步检查约束；两者都不修改上游子模块。
 

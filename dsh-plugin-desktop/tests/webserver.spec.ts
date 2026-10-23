@@ -105,7 +105,7 @@ describe('Desktop WebServer browser gate', () => {
     const server = await startWebServer()
     server.registerFallback((_req, res) => { res.end('ordinary dsh') })
 
-    const response = await fetch(`http://127.0.0.1:${String(server.port)}/anything`)
+    const response = await fetch(`http://127.0.0.1:${String(server.port!)}/anything`)
 
     expect(response.status).toBe(200)
     await expect(response.text()).resolves.toBe('ordinary dsh')
@@ -120,7 +120,7 @@ describe('Desktop WebServer browser gate', () => {
       handler: (_req, res) => { res.end('private') },
     })
     server.registerFallback((_req, res) => { res.end('fallback') })
-    const root = `http://127.0.0.1:${String(server.port)}`
+    const root = `http://127.0.0.1:${String(server.port!)}`
 
     expect((await fetch(`${root}/api/private`)).status).toBe(403)
     expect((await fetch(`${root}/api/private`, {
@@ -142,7 +142,7 @@ describe('Desktop WebServer browser gate', () => {
     const access = createDesktopBrowserAccess(true, Buffer.alloc(32, 4).toString('base64url'))
     const server = await startWebServer(access)
     server.registerFallback((_req, res) => { res.end('browser') })
-    const root = `http://127.0.0.1:${String(server.port)}`
+    const root = `http://127.0.0.1:${String(server.port!)}`
 
     const browser = await fetch(`${root}/?workspace=one`)
     expect(browser.status).toBe(200)
@@ -168,8 +168,8 @@ describe('Desktop WebServer browser gate', () => {
       },
     })
 
-    await expect(requestUpgrade(server.port, '/socket')).resolves.toContain('403 Forbidden')
-    await expect(requestUpgrade(server.port, '/socket', {
+    await expect(requestUpgrade(server.port!, '/socket')).resolves.toContain('403 Forbidden')
+    await expect(requestUpgrade(server.port!, '/socket', {
       [access.rendererHeader.name]: access.rendererHeader.value,
     })).resolves.toContain('101 Switching Protocols')
   })

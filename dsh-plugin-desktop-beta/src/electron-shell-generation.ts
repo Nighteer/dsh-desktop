@@ -13,11 +13,15 @@ import {
 } from 'electron'
 import { CompatibilityShell, type CompatibilityShellActions } from './compatibility-shell.ts'
 import { formatDesktopExitCode } from './desktop-logger.ts'
-import { showDesktopMessageBox } from './desktop-dialog-window.ts'
+import { showDesktopMessageBox, type DesktopMessageBoxOptions } from './desktop-dialog-window.ts'
 import { applicationNeedsReveal, revealApplication } from './electron-reveal.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
 import { DESKTOP_RENDERER_ACTION_CHANNEL } from './renderer-actions-contract.ts'
 import { createDesktopRendererActionDispatcher } from './renderer-actions-dispatch.ts'
+import { desktopApplicationMenu } from './desktop-application-menu.ts'
+import { desktopNativeCopy } from './native-dialog-copy.ts'
+import {desktopNotificationOptions} from './desktop-notification-branding.ts'
+import { readFileSync } from 'node:fs'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
@@ -26,6 +30,7 @@ import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { DesktopRendererRecovery } from './renderer-recovery.ts'
 import { RENDERER_SURFACE_PROBE, RendererSurfaceWatchdog } from './renderer-surface-watchdog.ts'
 import type { DesktopRendererAccessHeader } from './desktop-browser-access.ts'
+import { bindNativeCapabilities } from './native-capabilities.ts'
 import {
   fitMainWindowBounds,
   sameMainWindowBounds,
@@ -183,6 +188,7 @@ function isZoomShortcut(input: Electron.Input): 'in' | 'out' | 'reset' | undefin
 }
 
 export interface ElectronShellGenerationOptions {
+  readonly attachEnterpriseApplications?: (window:BrowserWindow,renderer:WebContents,base:()=>Electron.Rectangle,origin:string)=>()=>void
   readonly platform: ElectronPlatformStrategy
   readonly spec: DesktopShellSpec
   readonly preloadPath: string
@@ -212,6 +218,7 @@ export class ElectronShellGeneration {
   private refreshNativeMaterial: (() => void) | undefined
   private flushWindowState: (() => void) | undefined
   private cleanupListeners: (() => void) | undefined
+  private releaseNativeCapabilities: (() => Promise<void>) | undefined
   private readonly rendererRecovery: DesktopRendererRecovery
   private rendererRecoveryPending = false
   private readonly surfaceWatchdog: RendererSurfaceWatchdog
@@ -313,6 +320,8 @@ export class ElectronShellGeneration {
     const renderer = this.compatibilityShell?.webContents ?? window.webContents
     const chrome = this.compatibilityShell?.chromeWebContents ?? window.webContents
     this.renderer = renderer
+    this.releaseNativeCapabilities = bindNativeCapabilities(window, renderer, spec.url, menu => platform.setFileMenu?.(menu))
+    const detachEnterpriseApplications=this.options.attachEnterpriseApplications?.(window,renderer,()=>this.compatibilityShell?.content.getBounds()??{x:0,y:0,width:window.getContentSize()[0]!,height:window.getContentSize()[1]!},origin)
 
     // Desktop-owned actions stay on the Electron lifetime. The page reaches the
     // main process directly, so a Host generation that exited, hung, or never
@@ -326,6 +335,28 @@ export class ElectronShellGeneration {
         || event.senderFrame === null || event.senderFrame !== renderer.mainFrame
         || !sameOriginFrame(event.senderFrame.url, origin)) {
         throw new Error('dsh-plugin-desktop: untrusted Desktop action sender')
+      }
+      if(action==='application-menu'){
+        const english=this.options.chromeActions.locale()==='en'
+        const template=desktopApplicationMenu(english,{
+          run:command=>{void dispatchRendererAction(command).catch(error=>this.options.logError(String(error)))},
+          ...(this.options.chromeActions.remoteControl?{remoteControl:()=>{void this.options.chromeActions.remoteControl!.open().catch(error=>this.options.logError(String(error)))}}:{}),
+          about:()=>{
+            const {version}=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')) as {version:string}
+            void showDesktopMessageBox({
+              type: 'info',
+              title: english ? 'About LETS' : '关于 LETS',
+              message: english ? 'About LETS' : '关于 LETS',
+              detail: desktopNativeCopy(english ? 'en' : 'zh').installedVersion(version),
+              presentation: 'product-info',
+              buttons: [english ? 'OK' : '确定'],
+              defaultId: 0,
+              cancelId: 0,
+            }, window).catch(error=>this.options.logError(String(error)))
+          },
+        })
+        Menu.buildFromTemplate(template).popup({window,x:48,y:32})
+        return
       }
       await dispatchRendererAction(action)
     })
@@ -431,6 +462,7 @@ export class ElectronShellGeneration {
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
+      if (event.defaultPrevented) return
       const action = isZoomShortcut(input)
       if (action === undefined) return
       event.preventDefault()
@@ -552,6 +584,7 @@ export class ElectronShellGeneration {
     let tray: Tray | undefined
     let removeRendererAccessHeader: (() => void) | undefined
     this.cleanupListeners = () => {
+      detachEnterpriseApplications?.()
       window.off('hide', resetSurface)
       window.off('minimize', resetSurface)
       window.off('show', resetSurface)
@@ -748,15 +781,25 @@ export class ElectronShellGeneration {
 
   notifyAttention(notification: DesktopNotification): void {
     const window = this.window
-    if (window === undefined || window.isDestroyed() || window.isFocused()) return
+    if (window === undefined || window.isDestroyed()) return
 
-    this.attentionCount += 1
-    if (this.options.platform.platform === 'win32') window.flashFrame(true)
-    else app.setBadgeCount(this.attentionCount)
+    // A completed reply is still worth a brief confirmation in the foreground.
+    // Only background windows need taskbar/Dock attention; never steal focus.
+    if (!window.isFocused()) {
+      this.attentionCount += 1
+      if (this.options.platform.platform === 'win32') window.flashFrame(true)
+      else app.setBadgeCount(this.attentionCount)
+    }
 
-    if (!Notification.isSupported()) return
-    const nativeNotification = new Notification(notification)
+    if (!Notification.isSupported()) {
+      this.options.logError('LETS: native notifications are unavailable on this system')
+      return
+    }
+    const nativeNotification = new Notification(desktopNotificationOptions(notification))
     nativeNotification.once('click', () => { this.show() })
+    nativeNotification.once('failed', (_event, error) => {
+      this.options.logError(`LETS: native notification failed: ${String(error)}`)
+    })
     nativeNotification.show()
   }
 
@@ -767,7 +810,7 @@ export class ElectronShellGeneration {
       : await dialog.showOpenDialog(window, options)
   }
 
-  async showMessageBox(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+  async showMessageBox(options: DesktopMessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
     const window = this.window
     return window === undefined || window.isDestroyed()
       ? await showDesktopMessageBox(options)
@@ -812,6 +855,8 @@ export class ElectronShellGeneration {
 
     this.cleanupListeners?.()
     this.cleanupListeners = undefined
+    await this.releaseNativeCapabilities?.()
+    this.releaseNativeCapabilities = undefined
     this.compatibilityShell?.dispose()
     this.compatibilityShell = undefined
     this.renderer = undefined

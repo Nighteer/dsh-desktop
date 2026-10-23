@@ -171,7 +171,7 @@ function optionalBoolean(values: Record<string, unknown>, key: string, fallback:
 }
 
 function parseMode(value: unknown): DesktopSetupWizardMode {
-  if (value === undefined) return 'compatibility'
+  if (value === undefined) return process.platform==='win32'?'advanced':'compatibility'
   if (value === 'compatibility' || value === 'extended' || value === 'advanced') return value
   throw invalid('dsh-desktop.mode must be compatibility, extended, or advanced')
 }
@@ -197,8 +197,10 @@ function projectSettings(
 ): DesktopSetupWizardSettings {
   const desktop = section(root, DESKTOP_NAMESPACE)
   const notifications = section(root, NOTIFICATIONS_NAMESPACE)
-  const mode = parseMode(desktop.mode)
   const networkExposure = parseExposure(desktop.networkExposure)
+  // Only new local-only setups adopt enhanced mode. Keep legacy browser and
+  // LAN access working, and preserve all explicit presentation choices.
+  const mode = desktop.mode===undefined&&(desktop.openBrowser===true||networkExposure==='lan')?'compatibility':parseMode(desktop.mode)
   const openBrowser = desktopBrowserAccessEnabled(
     mode,
     optionalBoolean(desktop, 'openBrowser', false),
@@ -501,7 +503,7 @@ export async function migrateLegacyAgentPresetSettings(
 export function defaultDesktopSetupWizardSettings(
 ): DesktopSetupWizardSettings {
   return Object.freeze({
-    mode: 'compatibility',
+    mode: process.platform==='win32'?'advanced':'compatibility',
     macosMaterial: DEFAULT_MACOS_WINDOW_MATERIAL,
     windowsMaterial: DEFAULT_WINDOWS_WINDOW_MATERIAL,
     openBrowser: false,

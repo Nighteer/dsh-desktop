@@ -1,6 +1,6 @@
-/** Headless, confirmation-gated downloads for DSH Desktop installers. */
+/** Headless, confirmation-gated downloads for enterprise LETS installers. */
 
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
@@ -16,12 +16,12 @@ export type DesktopDownloadPlatform = 'darwin' | 'win32'
 
 /** Fixed download endpoints that record one user-confirmed installer download. */
 export const DESKTOP_DOWNLOAD_URLS: Readonly<Record<DesktopDownloadPlatform, string>> = {
-  darwin: 'https://www.dshdesktop.cn/api/downloads/mac',
-  win32: 'https://www.dshdesktop.cn/api/downloads/windows',
+  darwin: '/api/v1/desktop-updates/download/mac',
+  win32: '/api/v1/desktop-updates/download/windows',
 }
 
 /** Header pinning a download request and response to the checked release. */
-export const DESKTOP_TARGET_VERSION_HEADER = 'X-DSH-Desktop-Target-Version'
+export const DESKTOP_TARGET_VERSION_HEADER = 'X-LETS-Desktop-Target-Version'
 
 /** Maximum accepted installer size, in bytes. */
 export const MAX_UPDATE_DOWNLOAD_BYTES = 1024 * 1024 * 1024
@@ -41,6 +41,9 @@ export type UpdateArtifactRequest = (url: string, init: RequestInit) => Promise<
 
 /** Inputs for one user-confirmed installer download. */
 export interface DownloadDesktopUpdateOptions {
+  /** Immutable enterprise manifest pinned when the version was checked. */
+  readonly expectedSha256?: string
+  readonly expectedSize?: number
   /** Host platform selecting the fixed endpoint and installer validation. */
   readonly platform: DesktopDownloadPlatform
   /** Stable release version used to validate the selected installer. */
@@ -112,6 +115,10 @@ const UPDATE_ARTIFACT_STATE_FILENAME = 'pending-installer.json'
  * @throws {UpdateDownloadError} For invalid inputs, transport failures, rejected responses, cancellation, and invalid installers.
  */
 export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOptions): Promise<string> {
+  if ((options.expectedSha256 !== undefined && !/^[0-9a-f]{64}$/u.test(options.expectedSha256))
+    || (options.expectedSize !== undefined && (!Number.isSafeInteger(options.expectedSize) || options.expectedSize<1 || options.expectedSize>MAX_UPDATE_DOWNLOAD_BYTES))) {
+    throw new UpdateDownloadError('invalid-options','Invalid enterprise installer manifest.')
+  }
   const platform = validatedPlatform(options.platform)
   const channel = options.channel ?? 'stable'
   validatedVersion(options.version, channel)
@@ -128,7 +135,7 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
         [DESKTOP_TARGET_VERSION_HEADER]: options.version,
       },
       cache: 'no-store',
-      redirect: 'follow',
+      redirect: 'error',
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
   } catch (cause) {
@@ -150,7 +157,7 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
 
   let failure: unknown
   try {
-    await writeResponseBody(paths.temporary, response.body, options.signal)
+    await writeResponseBody(paths.temporary, response.body, options.signal, options.expectedSha256, options.expectedSize)
     throwIfAborted(options.signal)
     await validateArtifact(paths.temporary, platform)
     throwIfAborted(options.signal)
@@ -180,7 +187,7 @@ export function desktopUpdateFilename(
   validatedVersion(version, channel)
   const extension = platform === 'darwin' ? 'dmg' : 'exe'
   const platformName = platform === 'darwin' ? 'mac' : 'windows'
-  const product = channel === 'beta' ? 'DSH-Desktop-Beta' : 'DSH-Desktop'
+  const product = channel === 'beta' ? 'LETS-Desktop-Beta' : 'LETS-Desktop'
   return `${product}-${version}-${platformName}.${extension}`
 }
 
@@ -411,7 +418,10 @@ async function writeResponseBody(
   filename: string,
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
+  expectedSha256?: string,
+  expectedSize?: number,
 ): Promise<void> {
+  const hash = createHash('sha256')
   const handle = await open(filename, 'wx', PRIVATE_FILE_MODE)
   const reader = body.getReader()
   let bytesWritten = 0
@@ -428,10 +438,15 @@ async function writeResponseBody(
         )
       }
       await writeAll(handle, chunk.value)
+      hash.update(chunk.value)
       bytesWritten += chunk.value.byteLength
     }
     if (bytesWritten === 0) {
       throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
+    }
+    if ((expectedSize !== undefined && bytesWritten !== expectedSize)
+      || (expectedSha256 !== undefined && hash.digest('hex') !== expectedSha256)) {
+      throw new UpdateDownloadError('invalid-artifact','The installer does not match the published enterprise checksum or size.')
     }
     await handle.sync()
   } catch (cause) {

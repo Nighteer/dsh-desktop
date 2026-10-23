@@ -24,6 +24,7 @@ import {
 import { Button } from '../src/native-ui/components/ui/button.tsx'
 import { DialogClose } from '../src/native-ui/components/ui/dialog.tsx'
 import { desktopSetupWizardCopy } from '../src/setup-wizard-copy.ts'
+import { DESKTOP_RELEASE_CHANNEL } from '../src/product-identity.ts'
 
 const input: DesktopSetupWizardInput = {
   appVersion: '2.0.6-beta.1',
@@ -103,7 +104,6 @@ describe('Setup Wizard step flow', () => {
       'mode',
       'material',
       'market',
-      'aa',
       'notifications',
       'browser',
       'success',
@@ -117,7 +117,6 @@ describe('Setup Wizard step flow', () => {
       'mode',
       'material',
       'market',
-      'aa',
       'notifications',
       'browser',
     ])
@@ -125,7 +124,6 @@ describe('Setup Wizard step flow', () => {
       'mode',
       'material',
       'market',
-      'aa',
       'notifications',
       'browser',
       'success',
@@ -145,10 +143,12 @@ describe('Setup Wizard welcome page', () => {
     }))
     expect(markup).toContain('data-setup-step="welcome"')
     expect(markup).toContain(copy.welcomeTitle)
-    expect(markup).toContain(copy.beta)
+    const betaRelease = String(DESKTOP_RELEASE_CHANNEL) === 'beta'
+    expect(markup).toContain(betaRelease ? `${copy.beta} · v${input.appVersion}` : `v${input.appVersion}`)
     expect(markup).toContain(`v${input.appVersion}`)
     expect(markup).toContain('data-slot="badge"')
-    expect(markup).toContain('data-beta-placement="title-bottom-right"')
+    expect(markup).toContain(`data-release-channel="${DESKTOP_RELEASE_CHANNEL}"`)
+    if (!betaRelease) expect(markup).not.toContain(`${copy.beta} · v`)
     expect(markup).toContain('items-end')
     expect(markup).toContain('text-[10px]')
     expect(markup).toContain(copy.welcomeBody)
@@ -280,8 +280,8 @@ describe('Setup Wizard setting pages', () => {
   it('uses the shadcn Switch component for every wizard toggle', () => {
     const notifications = renderStep('notifications')
     const browser = renderStep('browser')
-    expect(occurrences(notifications, 'data-slot="switch"')).toBe(5)
-    expect(occurrences(notifications, 'role="switch"')).toBe(5)
+    expect(occurrences(notifications, 'data-slot="switch"')).toBe(3)
+    expect(occurrences(notifications, 'role="switch"')).toBe(3)
     expect(occurrences(browser, 'data-slot="switch"')).toBe(1)
     expect(occurrences(browser, 'role="switch"')).toBe(1)
   })
@@ -458,10 +458,7 @@ describe('Setup Wizard native UI boundaries', () => {
   })
 })
 
-it('offers AA opt-in with a Beta badge after the market page', () => {
-  const html = renderStep('aa')
-  expect(html).toContain('Agents-Anywhere')
-  expect(html).toContain('Beta')
-  expect(html).toContain('setup-aa-false')
-  expect(html).toContain('setup-aa-true')
+it('does not offer the incompatible remote adapter in the first-run journey', () => {
+  expect(DESKTOP_SETUP_WIZARD_STEPS).not.toContain('aa')
+  expect(renderStep('notifications')).not.toContain('setup-aa')
 })

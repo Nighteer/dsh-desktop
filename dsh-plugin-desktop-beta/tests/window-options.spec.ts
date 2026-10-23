@@ -68,6 +68,8 @@ describe('compatibility BrowserWindow options', () => {
         sandbox: true,
         webSecurity: true,
         partition: DESKTOP_RENDERER_SESSION_PARTITION,
+        webviewTag: true,
+        additionalArguments: ['--lets-desktop-origin=' + new URL(spec.url).origin],
       },
     }))
     expect(options).not.toHaveProperty('titleBarOverlay')

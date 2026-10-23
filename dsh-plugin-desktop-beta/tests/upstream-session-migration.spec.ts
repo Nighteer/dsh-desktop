@@ -1,7 +1,7 @@
 /** Exercise the shipped JSONL worker and native lock after retiring Desktop's preset alias. */
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -43,7 +43,7 @@ it('migrates a released code session through the installed V3 worker and preserv
     await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
     const handle = await ctx.sessionPersistence.open(id, 'write')
     try {
-      expect(handle.header).toMatchObject({ version: 3, agentPreset: 'ptc' })
+      expect(handle.header).toMatchObject({ version: 4, agentPreset: 'ptc' })
       const restored = await handle.read()
       expect(restored.events.map(event => event.type)).toEqual(expect.arrayContaining([
         'tool/ptc-dispatch-start', 'tool/ptc-dispatch', 'system/message',
@@ -55,8 +55,8 @@ it('migrates a released code session through the installed V3 worker and preserv
     }
     await ctx.sessionPersistence.flush()
     expect(await readFile(join(directory, 'session.v2.jsonl'), 'utf8')).toBe(source)
-    const published = await readFile(join(directory, 'session.v3.jsonl'), 'utf8')
-    expect(JSON.parse(published.split('\n')[0]!)).toMatchObject({ version: 3, agentPreset: 'ptc' })
+    const published = await readFile(join(directory, 'session.v4.jsonl'), 'utf8')
+    expect(JSON.parse(published.split('\n')[0]!)).toMatchObject({ version: 4, agentPreset: 'ptc' })
     const reloaded = await ctx.sessionPersistence.open(id, 'read')
     try { expect(reloaded.header.agentPreset).toBe('ptc') } finally { await reloaded.close() }
   } finally {

@@ -53,12 +53,28 @@ import {
   DesktopDialogWindow,
   desktopDialogPreferredHeight,
   parseDesktopDialogResponse,
+  showDesktopMessageBox,
 } from '../src/desktop-dialog-window.ts'
 
 describe('DesktopDialogWindow', () => {
   beforeEach(() => {
     electron.windows.length = 0
     vi.clearAllMocks()
+  })
+
+  it('preserves the shared product presentation through the MessageBox adapter', async () => {
+    const result = showDesktopMessageBox({
+      title: '关于 LETS', message: '关于 LETS', detail: '当前版本：2.0.12-beta.1',
+      buttons: ['确定'], presentation: 'product-info',
+    })
+    await vi.waitFor(() => { expect(electron.windows).toHaveLength(1) })
+    const window = electron.windows[0]!
+    const calls = window.loadFile.mock.calls as unknown as [string, { query: { state: string } }][]
+    expect(JSON.parse(Buffer.from(calls[0]![1].query.state, 'base64url').toString('utf8'))).toMatchObject({
+      presentation: 'product-info', message: '关于 LETS', detail: '当前版本：2.0.12-beta.1',
+    })
+    window.webListeners.get('will-navigate')?.({ preventDefault: vi.fn() }, 'dsh-desktop-dialog://response?id=0')
+    await expect(result).resolves.toEqual({ response: 0, checkboxChecked: false })
   })
 
   it('accepts only bounded local response navigation', () => {

@@ -79,6 +79,18 @@ describe('electronPlatformStrategy', () => {
     expect(window.setBackgroundMaterial).not.toHaveBeenCalled()
   })
 
+  it('keeps the configurable close menu across refreshes without retaining the old native role', () => {
+    const strategy = electronPlatformStrategy('darwin')
+    strategy.configureApplication({} as never, 'LETS')
+    const menu = {label: 'File', submenu: [{label: 'Close Page', accelerator: 'Command+Shift+K', click: vi.fn()}]}
+    strategy.setFileMenu?.(menu)
+    expect((electron.Menu.buildFromTemplate.mock.lastCall?.[0] as unknown[])[1]).toBe(menu)
+    strategy.refreshApplicationMenu([{label: 'Diagnostics'}])
+    expect((electron.Menu.buildFromTemplate.mock.lastCall?.[0] as unknown[])[1]).toBe(menu)
+    strategy.setFileMenu?.(undefined)
+    expect((electron.Menu.buildFromTemplate.mock.lastCall?.[0] as any[])[1].submenu[0].role).toBe('close')
+  })
+
   it('selects the Linux adapter without desktop chrome tweaks', () => {
     const strategy = electronPlatformStrategy('linux')
     const window = createWindow()

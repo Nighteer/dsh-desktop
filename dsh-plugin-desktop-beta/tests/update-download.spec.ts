@@ -16,6 +16,7 @@ import {
   type UpdateArtifactRequest,
 } from '../src/update-download.ts'
 import { DESKTOP_RELEASE_CHANNEL_HEADER } from '../src/update-checker.ts'
+import { createHash } from 'node:crypto'
 
 const temporaryRoots: string[] = []
 
@@ -78,11 +79,23 @@ afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
+describe('enterprise installer integrity',()=>{
+  it('accepts the exact published digest and rejects corruption or truncated content',async()=>{
+    const directory=await temporaryDirectory(),artifact=windowsArtifact()
+    const digest=createHash('sha256').update(artifact).digest('hex')
+    const options={platform:'win32' as const,version:'1.0.1',expectedSize:artifact.length,expectedSha256:digest,
+      request:async()=>chunkedResponse([artifact])}
+    await expect(downloadDesktopUpdate({...options,destinationPath:join(directory,'valid.exe')})).resolves.toContain('valid.exe')
+    await expect(downloadDesktopUpdate({...options,destinationPath:join(directory,'bad-hash.exe'),expectedSha256:'0'.repeat(64)})).rejects.toMatchObject({code:'invalid-artifact'})
+    await expect(downloadDesktopUpdate({...options,destinationPath:join(directory,'truncated.exe'),expectedSize:artifact.length+1})).rejects.toMatchObject({code:'invalid-artifact'})
+  })
+})
+
 describe('desktop update installer download', () => {
   it('pins a Beta artifact request to its channel and target version', async () => {
     const directory = await temporaryDirectory()
     const artifact = dmgArtifact()
-    const destination = join(directory, 'DSH-Desktop-Beta-2.0.6-beta.1-mac.dmg')
+    const destination = join(directory, 'LETS-Desktop-Beta-2.0.6-beta.1-mac.dmg')
     const result = await downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.0.6-beta.1',
@@ -100,7 +113,7 @@ describe('desktop update installer download', () => {
     })
     expect(result).toBe(destination)
     expect(desktopUpdateFilename('darwin', '2.0.6-beta.1', 'beta'))
-      .toBe('DSH-Desktop-Beta-2.0.6-beta.1-mac.dmg')
+      .toBe('LETS-Desktop-Beta-2.0.6-beta.1-mac.dmg')
   })
 
   it('accepts a Beta artifact without response identity headers', async () => {
@@ -109,10 +122,10 @@ describe('desktop update installer download', () => {
       platform: 'darwin',
       version: '2.0.6-beta.1',
       channel: 'beta',
-      destinationPath: join(directory, 'DSH-Desktop-Beta-2.0.6-beta.1-mac.dmg'),
+      destinationPath: join(directory, 'LETS-Desktop-Beta-2.0.6-beta.1-mac.dmg'),
       request: async () => chunkedResponse([dmgArtifact()]),
     })
-    expect(result).toBe(join(directory, 'DSH-Desktop-Beta-2.0.6-beta.1-mac.dmg'))
+    expect(result).toBe(join(directory, 'LETS-Desktop-Beta-2.0.6-beta.1-mac.dmg'))
   })
 
   it('streams a macOS DMG from only the fixed endpoint and atomically completes it', async () => {
@@ -131,11 +144,11 @@ describe('desktop update installer download', () => {
       request,
     })
 
-    expect(result).toBe(join(directory, 'DSH-Desktop-2.1.0-mac.dmg'))
+    expect(result).toBe(join(directory, 'LETS-Desktop-2.1.0-mac.dmg'))
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe(DESKTOP_DOWNLOAD_URLS.darwin)
-    expect(calls[0]?.init).toMatchObject({ method: 'GET', cache: 'no-store', redirect: 'follow' })
+    expect(calls[0]?.init).toMatchObject({ method: 'GET', cache: 'no-store', redirect: 'error' })
     await expectNoPartialFiles(directory)
   })
 
@@ -152,7 +165,7 @@ describe('desktop update installer download', () => {
       },
     })
 
-    expect(result).toBe(join(directory, 'DSH-Desktop-2.2.0-windows.exe'))
+    expect(result).toBe(join(directory, 'LETS-Desktop-2.2.0-windows.exe'))
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
     await expectNoPartialFiles(directory)
   })
@@ -168,7 +181,7 @@ describe('desktop update installer download', () => {
 
     expect(result).toBe(join(
       directory,
-      'DSH-Desktop-2.8.0+build-mac.dmg',
+      'LETS-Desktop-2.8.0+build-mac.dmg',
     ))
   })
 

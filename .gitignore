@@ -14,3 +14,35 @@ dsh-plugin-desktop/lib/
 dsh-community-market/lib/
 
 .env.yarn
+
+# Workspace-local package-manager caches used by isolated development shells.
+.corepack-cache/
+.electron-cache/
+.npm-cache/
+.yarn-cache/
+.yarn-global/
+
+# Workspace-local state used for isolated desktop development and UI review.
+.runtime-appdata/
+.runtime-localappdata/
+.runtime-dsh-home/
+.artifacts/
+.playwright-cli/
+.enterprise-local/
+output/playwright/
+dsh-enterprise-admin/dist/
+dsh-enterprise-server/lib/
+dsh-enterprise-contracts/lib/
+deployment/enterprise/runtime/.yarn/
+deployment/enterprise/runtime/node_modules/
+
+# Generated, isolated Office interpreters (prepared explicitly; never system Python).
+dsh-plugin-desktop/build/office-runtime/
+dsh-plugin-desktop-beta/build/office-runtime/
+dsh-plugin-desktop-beta/build/office-runtime-incomplete-*/
+dsh-plugin-desktop-beta/build/office-runtime-previous-*/
+dsh-plugin-desktop/build/office-runtime-previous-*/
+
+# Official upstream Office payload snapshots, prepared explicitly and kept separate.
+dsh-plugin-desktop/build/official-office/
+dsh-plugin-desktop-beta/build/official-office/

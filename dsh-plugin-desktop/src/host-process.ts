@@ -7,6 +7,7 @@ import { bindNativeRuntime, runtimeSnapshot } from './host-runtime-bridge.ts'
 import type { DesktopHostOptions } from './host-bootstrap.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
+import type { DesktopTaskInspection } from './desktop-task-control.ts'
 import type { DesktopLanHttpsRuntimeOptions } from './lan-https-runtime.ts'
 
 export interface IsolatedHostOptions {
@@ -62,7 +63,12 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
     await releaseNative()
     rpc.close()
   })()
-  options.bindHost({ fiber: { dispose: stop } })
+  options.bindHost({ fiber: { dispose: stop }, get tasks() {
+    return booted && !stopping && !exited ? {
+      inspectQuit: () => rpc.call<DesktopTaskInspection>('tasks:quit', [], undefined, 2000),
+      updateTasks: (action: 'inspect' | 'lock' | 'unlock') => rpc.call<boolean>('tasks:update', [action], undefined, 2000),
+    } : undefined
+  } })
   try {
     const { desktopLaunchEnvironment, ...host } = options.host
     await rpc.call('boot', [{ ...host, launchEnvironmentLayers: serializeHostEnvironment(desktopLaunchEnvironment) }, runtimeSnapshot(options.runtime), options.rendererToken])

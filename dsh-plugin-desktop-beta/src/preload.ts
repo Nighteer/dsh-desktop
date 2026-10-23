@@ -1,6 +1,8 @@
 /** Minimal context-isolated bridges for drag payloads and Desktop-owned actions. */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { installNativeCapabilitiesPreload } from './native-capabilities-preload.ts'
+import {ENTERPRISE_APPLICATIONS_CHANNEL,ENTERPRISE_APPLICATIONS_EVENT,type EnterpriseApplicationsBridge,type EnterpriseApplicationsEvent} from './enterprise-applications-contract.ts'
 import { DESKTOP_FILE_PATH_BRIDGE } from './file-path-bridge-contract.ts'
 import {
   DESKTOP_RENDERER_ACTION_CHANNEL,
@@ -21,3 +23,9 @@ const actions: DesktopRendererActionsBridge = {
   invoke: (action: DesktopRendererAction) => ipcRenderer.invoke(DESKTOP_RENDERER_ACTION_CHANNEL, action),
 }
 contextBridge.exposeInMainWorld(DESKTOP_RENDERER_ACTIONS_BRIDGE, actions)
+const enterpriseApplications:EnterpriseApplicationsBridge={
+  invoke:action=>ipcRenderer.invoke(ENTERPRISE_APPLICATIONS_CHANNEL,action),
+  subscribe:listener=>{const receive=(_event:Electron.IpcRendererEvent,value:EnterpriseApplicationsEvent)=>listener(value);ipcRenderer.on(ENTERPRISE_APPLICATIONS_EVENT,receive);return()=>{ipcRenderer.removeListener(ENTERPRISE_APPLICATIONS_EVENT,receive)}},
+}
+contextBridge.exposeInMainWorld('letsEnterpriseApplications',enterpriseApplications)
+installNativeCapabilitiesPreload()

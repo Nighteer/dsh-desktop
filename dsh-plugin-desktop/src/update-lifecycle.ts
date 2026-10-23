@@ -259,7 +259,9 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
           await this.options.adapter.downloadAndOpen(version, controller.signal, channel)
         }
       } catch {
-        // Network, filesystem, and installer-opening failures are deliberately silent.
+        if (!this.disposed && !controller.signal.aborted) {
+          await this.options.adapter.showDownloadFailure?.().catch(() => undefined)
+        }
       } finally {
         if (this.downloadController === controller) this.downloadController = undefined
         this.downloadingVersion = undefined
@@ -355,8 +357,8 @@ function parseState(text: string): ParsedUpdateState {
 
 function updateAvailableNotification(locale: DesktopLocale, version: string): DesktopNotification {
   return locale === 'zh'
-    ? { title: 'DSH Desktop 有可用更新', body: `版本 ${version} 已可下载。打开 DSH Desktop 即可继续。` }
-    : { title: 'DSH Desktop Update Available', body: `Version ${version} is ready to download. Open DSH Desktop to continue.` }
+    ? { title: 'LETS Desktop 有可用更新', body: `企业版本 ${version} 已可下载。打开 LETS Desktop 即可继续。` }
+    : { title: 'LETS Desktop Update Available', body: `Enterprise version ${version} is ready to download. Open LETS Desktop to continue.` }
 }
 
 async function readState(filename: string): Promise<string> {

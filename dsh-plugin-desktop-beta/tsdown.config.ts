@@ -10,6 +10,9 @@ export default defineConfig([
       'module-resolution': 'src/module-resolution.ts',
       webserver: 'src/webserver.ts',
       profile: 'src/profile.ts',
+      'enterprise-models': 'src/enterprise-models.ts',
+      'official-office': 'src/official-office.ts',
+      'native-capabilities': 'src/native-capabilities.ts',
       'profile-manager': 'src/profile-manager.ts',
       'profile-service': 'src/profile-service.ts',
       'desktop-plugins': 'src/desktop-plugins.ts',
@@ -90,12 +93,12 @@ export default defineConfig([
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
   },
-  {
-    name: `${PACKAGE_NAME}/preload`,
-    entry: { preload: 'src/preload.ts', 'compatibility-preload': 'src/compatibility-preload.ts' },
+  ...(['preload','compatibility-preload','enterprise-preload','enterprise-applications-preload'] as const).map(entry => ({
+    name: `${PACKAGE_NAME}/${entry}`,
+    entry: { [entry]: `src/${entry}.ts` },
     outDir: 'lib',
-    format: 'cjs',
-    platform: 'node',
+    format: 'cjs' as const,
+    platform: 'node' as const,
     target: 'es2022',
     fixedExtension: false,
     dts: false,
@@ -104,6 +107,8 @@ export default defineConfig([
     external: ['electron'],
     outputOptions: {
       entryFileNames: '[name].cjs',
+      // Sandboxed Electron preloads may only require approved builtins, not sibling chunks.
+      codeSplitting: false,
     },
-  },
+  })),
 ])

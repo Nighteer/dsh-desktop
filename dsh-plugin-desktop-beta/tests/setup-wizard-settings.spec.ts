@@ -62,7 +62,7 @@ describe('Desktop Setup Wizard settings document', () => {
     expect(readDesktopSetupWizardSettings(join(root, 'settings.json')))
       .toEqual(defaultDesktopSetupWizardSettings())
     expect(defaultDesktopSetupWizardSettings()).toMatchObject({
-      mode: 'compatibility',
+      mode: process.platform==='win32'?'advanced':'compatibility',
       macosMaterial: 'transparent',
       windowsMaterial: 'off',
       openBrowser: false,

@@ -86,7 +86,7 @@ function referrerOrigin(value: string | undefined): string | undefined {
  * use the standard same-origin fetch metadata plus its same-origin referrer,
  * because browsers commonly omit Origin on same-origin GET requests.
  */
-function isSameOriginLoopbackRequest(
+export function isSameOriginLoopbackRequest(
   req: IncomingMessage,
   expectedOrigin: string,
   mutating: boolean,
@@ -324,8 +324,8 @@ export async function handleDesktopAaSelectRequest(
   req: IncomingMessage,
   res: ServerResponse,
   expectedOrigin: string,
-  controller: DesktopSettingsController,
-  reportError: (operation: string, cause: unknown) => void = () => {},
+  _controller: DesktopSettingsController,
+  _reportError: (operation: string, cause: unknown) => void = () => {},
 ): Promise<void> {
   if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
   if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
@@ -335,19 +335,7 @@ export async function handleDesktopAaSelectRequest(
   if (value === INVALID_BODY) return
   const request = isExactRecord(value, 'enabled') && typeof value.enabled === 'boolean' ? { enabled: value.enabled } : undefined
   if (request === undefined) return finishJson(res, 400, error('invalid AA selection request'))
-  try {
-    const operation = await controller.selectAa(request.enabled)
-    finishPostResponse(
-      res,
-      operation.response.restartRequired ? 202 : 200,
-      operation,
-      'select AA plugin',
-      reportError,
-    )
-  } catch (cause) {
-    reportError('select AA plugin', cause)
-    finishJson(res, 500, error('AA selection could not be saved'))
-  }
+  return finishJson(res, 410, error('远程控制已停用，原配置和数据保留。'))
 }
 
 /** Open the launcher-owned DSH terminal from an exact empty request. */

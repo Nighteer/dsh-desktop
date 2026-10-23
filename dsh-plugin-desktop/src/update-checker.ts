@@ -1,4 +1,4 @@
-/** Headless version checks against the public DSH Desktop release service. */
+/** Headless LETS version checks through the authenticated enterprise transport. */
 
 import {
   assertDesktopInstallationId,
@@ -6,14 +6,14 @@ import {
   type DesktopInstallationId,
 } from './desktop-installation-id.ts'
 
-/** Public endpoint returning the latest DSH Desktop version for a requested channel. */
-export const DESKTOP_VERSION_ENDPOINT = 'https://www.dshdesktop.cn/api/desktop/version'
+/** Relative endpoint resolved exclusively by the logged-in enterprise transport. */
+export const DESKTOP_VERSION_ENDPOINT = '/api/v1/desktop-updates/check'
 
 /** Header carrying the installed Desktop version to the fixed version endpoint. */
-export const DESKTOP_CURRENT_VERSION_HEADER = 'X-DSH-Desktop-Version'
+export const DESKTOP_CURRENT_VERSION_HEADER = 'X-LETS-Desktop-Version'
 
 /** Header selecting an isolated Desktop release stream. */
-export const DESKTOP_RELEASE_CHANNEL_HEADER = 'X-DSH-Desktop-Channel'
+export const DESKTOP_RELEASE_CHANNEL_HEADER = 'X-LETS-Desktop-Channel'
 
 /** Release streams supported by the Desktop service. */
 export type DesktopReleaseChannel = 'stable' | 'beta'
@@ -152,6 +152,11 @@ export async function checkForDesktopUpdate(
     return null
   }
 
+  try {
+    if ((JSON.parse(body) as {available?:unknown}).available === false) return {
+      status:'up-to-date',currentVersion:current.version,latestVersion:current.version,
+    }
+  } catch { return null }
   const latest = parseVersionResponse(body, options.channel)
   if (latest === null) return null
   const comparison = compareParsedSemVer(latest, current)

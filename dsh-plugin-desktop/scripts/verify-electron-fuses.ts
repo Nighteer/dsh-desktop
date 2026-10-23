@@ -220,6 +220,19 @@ function requestedArchitectures(
   const targetNames = new Set(
     [...targets.keys()].filter((name): name is string => typeof name === 'string'),
   )
+  // Windows omits directory-only targets entirely. Require an explicit
+  // directory architecture rather than guessing from stale output folders.
+  if (key === 'win' && targets.size === 0) {
+    const configured = result.configuration.win?.target
+    const entries = configured == null ? [] : Array.isArray(configured) ? configured : [configured]
+    if (entries.length > 0 && entries.every(target => {
+      const name = typeof target === 'string' ? target : target.target
+      return name === DIR_TARGET || name.startsWith(`${DIR_TARGET}:`)
+    })) {
+      const directoryArchs = configuredTargetArchitectures(result.configuration.win, new Set([DIR_TARGET]), description)
+      if (directoryArchs.length > 0) return directoryArchs
+    }
+  }
   const fromConfiguration = configuredTargetArchitectures(
     result.configuration[key],
     targetNames,

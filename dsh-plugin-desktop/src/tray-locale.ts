@@ -29,7 +29,7 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     addProfile: () => 'New Profile…',
     checkForUpdates: () => 'Check for Updates…',
     checkingForUpdates: () => 'Checking for Updates…',
-    downloadingUpdate: version => `Downloading DSH Desktop ${version}…`,
+    downloadingUpdate: version => `Downloading LETS Desktop ${version}…`,
     enterSafeMode: () => 'Enter Safe Mode…',
     exportDiagnostics: () => 'Export Diagnostics…',
     exitSafeMode: () => 'Exit Safe Mode and Restart…',
@@ -44,13 +44,13 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     extended: () => 'Extended Window',
     installStable: () => 'Install Stable Edition…',
     unavailableForDesktop: profileName => `${profileName} (Unavailable for Desktop)`,
-    updateAvailable: version => `DSH Desktop ${version} Available`,
+    updateAvailable: version => `LETS Desktop ${version} Available`,
   },
   zh: {
     addProfile: () => '新建 Profile…',
     checkForUpdates: () => '检查更新…',
     checkingForUpdates: () => '正在检查更新…',
-    downloadingUpdate: version => `正在下载 DSH Desktop ${version}…`,
+    downloadingUpdate: version => `正在下载 LETS Desktop ${version}…`,
     enterSafeMode: () => '进入安全模式…',
     exportDiagnostics: () => '导出诊断信息…',
     exitSafeMode: () => '退出安全模式并重启…',
@@ -65,7 +65,7 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     extended: () => '扩展窗口',
     installStable: () => '安装稳定版…',
     unavailableForDesktop: profileName => `${profileName}（不可用于桌面端）`,
-    updateAvailable: version => `DSH Desktop ${version} 可用`,
+    updateAvailable: version => `LETS Desktop ${version} 可用`,
   },
 }
 

@@ -1,9 +1,10 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm,writeFile,readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
-import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
-import z from '@deepseek-ai/schemastery'
+import { join, dirname } from 'node:path'
+import { boot } from '@deepseek-ai/dsh-app-boot'
+import ConfigEditor from '@deepseek-ai/dsh-config-editor'
+import { pathToFileURL } from 'node:url'
+import {parse as parseYaml,stringify as stringifyYaml} from 'yaml'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID } from '../src/adapters/dsh-1024store.js'
 import { SettingsCatalogSourceStore, type MarketSettingsDocument } from '../src/catalog/source-store.js'
@@ -19,12 +20,20 @@ afterEach(async () => {
 async function temporarySettingsFile(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-market-settings-'))
   cleanups.push(async () => { await rm(dir, { recursive: true, force: true }) })
-  return join(dir, 'settings.yaml')
+  return join(dir, 'cordis.patch.yml')
 }
 
 async function bootMarketSettings(path: string) {
-  const ctx = new Context()
-  await ctx.plugin(FileSettingsProvider, { path, watch: false })
+  const root=dirname(path),schema=join(root,'forms.mjs'),config=join(root,'cordis.yml')
+  await writeFile(join(root,'package.json'),JSON.stringify({name:'market-settings-fixture',private:true,type:'module',dsh:{profile:{bundles:[]}}}))
+  await writeFile(config,'[]\n')
+  await writeFile(schema,`import z from ${JSON.stringify(import.meta.resolve('@deepseek-ai/schemastery'))};export const Config=z.object({sources:z.array(z.any()).default([]).volatile(),label:z.string().default('default').volatile()});export function apply(){}`)
+  try{await readFile(path)}catch{await writeFile(path,stringifyYaml([{insert:[{id:'community-market',name:pathToFileURL(schema).href},{id:SIBLING_NAMESPACE,name:pathToFileURL(schema).href},{id:'settings',name:import.meta.resolve('@deepseek-ai/dsh-settings')}]}]))}
+  const patches=parseYaml(await readFile(path,'utf8'))
+  const ctx=await boot('market-settings-test',config,patches,async child=>{
+    child.provide('profileContext',{name:'test',dir:root,patchPath:path,installAnchor:root,home:root,cwd:root,startedBundles:[],overlays:[]})
+    await child.plugin(ConfigEditor)
+  },pathToFileURL(join(root,'package.json')).href)
   let disposed = false
   const dispose = async () => {
     if (disposed) return
@@ -45,33 +54,30 @@ const source: LocalSourceRecord = {
   order: 0,
 }
 
-const SiblingSchema = z.object({ label: z.string().default('default') })
 const SIBLING_NAMESPACE = 'market-persistence-fixture'
 
-describe('community market file-backed settings', () => {
+describe('community market profile-native settings', () => {
   it('restores sources in a new Host context', async () => {
     const path = await temporarySettingsFile()
     const first = await bootMarketSettings(path)
 
-    await first.scope.replace({ sources: [source] })
+    await first.scope.update({ sources: [source] })
     await first.dispose()
 
     const second = await bootMarketSettings(path)
-    expect(second.scope.get()).toEqual({ sources: [source] } satisfies MarketSettingsDocument)
+    expect(second.scope.get()).toMatchObject({ sources: [source] } satisfies MarketSettingsDocument)
   })
 
   it('preserves another plugin namespace while persisting market settings', async () => {
     const path = await temporarySettingsFile()
     const first = await bootMarketSettings(path)
-    const firstSibling = first.ctx.settings.register(SIBLING_NAMESPACE, SiblingSchema)
-    await firstSibling.update({ label: 'retained across restart' })
+    await first.ctx.settings.update(SIBLING_NAMESPACE,{ label: 'retained across restart' })
 
     await new SettingsCatalogSourceStore(first.scope).save([source])
     await first.dispose()
 
     const second = await bootMarketSettings(path)
-    const secondSibling = second.ctx.settings.register(SIBLING_NAMESPACE, SiblingSchema)
-    expect(secondSibling.get()).toEqual({ label: 'retained across restart' })
-    expect(second.scope.get()).toEqual({ sources: [source] } satisfies MarketSettingsDocument)
+    expect(second.ctx.settings.describe().find(row=>row.ns===SIBLING_NAMESPACE)?.value).toMatchObject({ label: 'retained across restart' })
+    expect(second.scope.get()).toMatchObject({ sources: [source] } satisfies MarketSettingsDocument)
   })
 })

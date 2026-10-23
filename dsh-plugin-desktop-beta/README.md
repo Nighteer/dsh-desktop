@@ -8,9 +8,9 @@ The stable `dsh-plugin-desktop` package and this Beta package can be installed o
 
 ## Architecture
 
-The Electron executable is minimal bootstrap code. It acquires the single-instance lock, resolves the selected DSH profile, provides the native runtime capability, and boots the Host Cordis root in the Electron main process. The `desktop-shell` Host plugin owns the `BrowserWindow`, navigation policy, settings namespace, and close-versus-quit lifecycle through Cordis effects. The native runtime owns the physical tray, while `desktop-shell`, `desktop-profiles`, `desktop-terminal`, and `desktop-updates` contribute effect-scoped commands through its ordered item registry.
+The Electron executable is the native launcher. It acquires the single-instance lock, resolves the selected DSH profile, owns native lifecycle resources, and starts the Host Cordis root in a separate Electron utility process by default. A bounded RPC bridge lets the isolated Host request native capabilities without owning Electron objects. The `desktop-shell` Host plugin schedules the `BrowserWindow`, navigation policy, settings namespace, and close-versus-quit lifecycle through Cordis effects. The native runtime owns the physical tray, while `desktop-shell`, `desktop-profiles`, `desktop-terminal`, and `desktop-updates` contribute effect-scoped commands through its ordered item registry.
 
-All three presentation modes reuse the existing Web carrier. The profile mounts the ordinary `dsh-base` and `dsh-web-app` bundles. By default, the Host binds its HTTP and WebSocket surface to `127.0.0.1` on an ephemeral port; an explicitly confirmed LAN setting binds all interfaces, while Electron continues to load the loopback same-origin page in a sandboxed renderer. There is no Electron-owned plugin roster, preload bridge, or raw Electron API in the renderer.
+All three presentation modes reuse the existing Web carrier. The profile mounts the ordinary `dsh-base` and `dsh-web-app` bundles. By default, the Host binds its HTTP and WebSocket surface to `127.0.0.1` on an ephemeral port; an explicitly confirmed LAN setting binds all interfaces, while Electron continues to load the loopback same-origin page in a sandboxed renderer. There is no Electron-owned plugin roster or raw Electron API in the renderer. A minimal context-isolated preload exposes only the explicitly declared Desktop actions and file-path bridge.
 
 The desktop package has normal Host and Web Client faces. Its Client face validates the Host-supplied mode, platform, and capability-gated material markers in every mode. Compatibility places the unchanged official presentation below an independent Desktop frame. Extended mode replaces the official root layout with its own Desktop-owned layout and sidebar surface while continuing to host the official sidebar, conversation, and details occupants. Enhanced mode retains a separate root registration and the compact internal-caption geometry established by the original enhanced implementation. Third-party Web clients continue to use the ordinary DSH module graph in every mode.
 
@@ -109,6 +109,13 @@ yarn dev
 ```
 
 `dev` builds before launching. It does not require a separate manual build.
+
+For an isolated development run, set `DSH_DESKTOP_USER_DATA_DIR` to an absolute directory before starting Electron. The override contains logs, caches, crash evidence, settings, and cross-release development state, so the run does not read or write the installed application's default user-data tree. A missing directory is created by Electron; an existing target must be an ordinary directory. Empty, relative, filesystem-root, file, symbolic-link, and other special targets are rejected. When the variable is unset, the normal `DSH Desktop Beta` location is unchanged.
+
+```powershell
+$env:DSH_DESKTOP_USER_DATA_DIR = (Join-Path $PWD '.runtime-appdata\desktop-beta')
+corepack yarn dev
+```
 
 The headless-safe launcher surfaces can be exercised without importing or starting Electron:
 

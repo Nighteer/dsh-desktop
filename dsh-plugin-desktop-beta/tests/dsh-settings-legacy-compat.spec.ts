@@ -2,57 +2,41 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
-import {
-  deepEqualJson,
-  installSettingsSection,
-  settingsNamespace,
-  type SettingsSectionHooks,
-} from '@deepseek-ai/dsh-settings'
-import z from '@deepseek-ai/schemastery'
 import { describe, expect, it, vi } from 'vitest'
+import { desktopConfigScope, readConfigForm, watchConfigForms } from '../src/config-forms.ts'
 
-describe('pre-alpha.2 settings compatibility', () => {
-  it('keeps namespace validation while restoring the legacy constructor', () => {
-    expect(String(settingsNamespace('dsh-market'))).toBe('dsh-market')
-    expect(() => settingsNamespace('DSH Market')).toThrow(TypeError)
+describe('profile-native settings compatibility', () => {
+  it('reads only the requested native entry without opening legacy files', () => {
+    const ctx={get:()=>({describe:()=>[{ns:'desktop-shell',value:{mode:'advanced'}}]})} as unknown as Context
+    expect(readConfigForm(ctx,'desktop-shell')).toEqual({mode:'advanced'})
+    expect(readConfigForm(ctx,'unknown')).toBeUndefined()
   })
-
-  it('re-exports the legacy JSON equality helper from its alpha.2 owner', () => {
-    expect(deepEqualJson({ nested: [1, true] }, { nested: [1, true] })).toBe(true)
-    expect(deepEqualJson({ nested: [1] }, { nested: [2] })).toBe(false)
+  it('delegates validated updates to the native profile form', async () => {
+    const update=vi.fn(async()=>{})
+    const settings={describe:()=>[{ns:'desktop-shell',value:{port:0}}],update}
+    const ctx={get:()=>settings,settings} as unknown as Context
+    const scope=desktopConfigScope(ctx,'desktop-shell',{port:0},value=>{if(value.port<0)throw Error('invalid port')})
+    await scope.update({port:43120})
+    expect(update).toHaveBeenCalledWith('desktop-shell',{port:43120})
+    await expect(scope.update({port:-1})).rejects.toThrow('invalid port')
+    expect(update).toHaveBeenCalledOnce()
   })
-
-  it('delegates the legacy section helper to the alpha.2 provider method', () => {
-    const schema = z.object({ enabled: z.boolean().default(true) })
-    const entry = { enabled: true }
-    const hooks: SettingsSectionHooks<typeof entry> = {
-      setSource: vi.fn(),
-      onChange: vi.fn(),
-    }
-    const installSection = vi.fn()
-    const settingsContext = { settings: { installSection } }
-    const inject = vi.fn((services: string[], callback: (ctx: typeof settingsContext) => void) => {
-      expect(services).toEqual(['settings'])
-      callback(settingsContext)
-    })
-    const owner = { inject } as unknown as Context
-
-    installSettingsSection(owner, settingsNamespace('dsh-market'), schema, entry, hooks)
-
-    expect(installSection).toHaveBeenCalledOnce()
-    expect(installSection).toHaveBeenCalledWith(owner, 'dsh-market', schema, entry, hooks)
+  it('coalesces document events and stops queued observers when disposed', async () => {
+    let listener:(ns:string)=>void=()=>{}
+    const stop=vi.fn()
+    const ctx={get:()=>({describe:()=>[{ns:'probe',value:{enabled:true}}]}),on:(_event:string,callback:typeof listener)=>{listener=callback;return stop},effect:vi.fn()} as unknown as Context
+    const observer=vi.fn()
+    const dispose=watchConfigForms(ctx,observer)
+    listener('probe');listener('probe');await Promise.resolve()
+    expect(observer).toHaveBeenCalledOnce()
+    listener('probe');dispose();await Promise.resolve()
+    expect(observer).toHaveBeenCalledOnce()
+    expect(stop).toHaveBeenCalledOnce()
   })
-
-  it('allows the bundled legacy dshmarket settings module to instantiate', async () => {
-    const require = createRequire(import.meta.url)
-    const manifest = require.resolve('dshmarket/package.json')
-    const settingsUrl = pathToFileURL(join(dirname(manifest), 'lib', 'settings.js')).href
-    const loaded = await import(settingsUrl) as {
-      MARKET_SETTINGS_NS: string
-      installMarketSettings: unknown
-    }
-
-    expect(String(loaded.MARKET_SETTINGS_NS)).toBe('dsh-market')
+  it('loads the upgraded market without removed settings helper imports', async () => {
+    const require=createRequire(import.meta.url)
+    const loaded=await import(pathToFileURL(join(dirname(require.resolve('dshmarket/package.json')),'lib','settings.js')).href)
+    expect(loaded.MARKET_SETTINGS_NS).toBe('dsh-market')
     expect(loaded.installMarketSettings).toBeTypeOf('function')
   })
 })

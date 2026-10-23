@@ -1,0 +1,73 @@
+diff --git a/lib/client.js b/lib/client.js
+index 4a90f09878..19d043ef90 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -14898,7 +14898,8 @@ window.__ModuleLoader__.load({
+ 							setPickerOpen(false);
+ 						}
+ 					}),
+-					renderSlot("conversation.hero.agentPreset", {})
++					renderSlot("conversation.hero.agentPreset", {}),
++					renderSlot("conversation.hero.modeActions", { session })
+ 				]
+ 			});
+ 			const inert = sessionId === void 0 || hero && chipTitle === void 0;
+@@ -14925,7 +14926,8 @@ window.__ModuleLoader__.load({
+ 					}),
+ 					hero && heroWorkspaceRow,
+ 					zone !== void 0 && renderSlot("conversation.input.dock", zone),
+-					inputBar
++					inputBar,
++					hero && renderSlot("conversation.hero.dock", { session })
+ 				]
+ 			});
+ 			const phase = settling ? "settling" : hero ? "hero" : "active";
+@@ -15806,6 +15808,7 @@ window.__ModuleLoader__.load({
+ 		const InputBar = (0, react.memo)(function InputBar({ useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments, retryFileUpload, toggleCommandMenu, stop, command, t, renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher, useProjection, sessionId, variant, disabled: inert = false, blocked, workspacePickerOpen = false, onRequestWorkspace, placeholder, accessory }) {
+ 			const input = useInput((s) => s);
+ 			const notice = useNotices((s) => s);
++			const session = useSession((s) => s);
+ 			const busyEnter = useBusyEnter((s) => s);
+ 			const commandMenuOpen = useMenuLauncher((source) => source === "command");
+ 			const promptError = useSession((s) => s.promptError) ?? null;
+@@ -16079,6 +16082,7 @@ window.__ModuleLoader__.load({
+ 								className: InputBar_module_css_default.accessory,
+ 								children: accessory
+ 							}),
++							renderSlot("conversation.input.accessory", { session }),
+ 							renderSlot("conversation.input.attachments", {
+ 								attachments,
+ 								canAcceptDrop,
+@@ -16256,7 +16260,7 @@ window.__ModuleLoader__.load({
+ 							})
+ 						]
+ 					}),
+-					variant === "composer" && input !== void 0 && sessionId !== void 0 ? renderSlot("conversation.composer.dock", {}) : null
++					variant === "composer" && input !== void 0 && sessionId !== void 0 ? renderSlot("conversation.composer.dock", { session }) : null
+ 				]
+ 			});
+ 		});
+@@ -16638,6 +16642,8 @@ window.__ModuleLoader__.load({
+ 						kind: "single",
+ 						scope: "root"
+ 					},
++					"conversation.hero.modeActions": { kind: "list", scope: "session-maybe" },
++					"conversation.hero.dock": { kind: "list", scope: "session-maybe" },
+ 					"conversation.hero.agentPreset": {
+ 						kind: "single",
+ 						scope: "root"
+@@ -16717,6 +16723,7 @@ window.__ModuleLoader__.load({
+ 				name: "conversation.composer.bar",
+ 				locale: NS,
+ 				children: {
++					"conversation.input.accessory": { kind: "list", scope: "session-maybe" },
+ 					"conversation.input.attachments": {
+ 						kind: "single",
+ 						scope: "session-maybe"
+@@ -16861,4 +16868,4 @@ window.__ModuleLoader__.load({
+ 	}
+ });
+ 
+-//# sourceMappingURL=client.js.map
+\ No newline at end of file
++//# sourceMappingURL=client.js.map

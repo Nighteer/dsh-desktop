@@ -17,6 +17,7 @@ export interface ElectronPlatformStrategy {
     applicationMenuItems?: readonly MenuItemConstructorOptions[],
   ): void
   refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[]): void
+  setFileMenu?(menu: MenuItemConstructorOptions | undefined): void
   configureWindow(window: BrowserWindow): void
   refreshThemeMaterial(window: BrowserWindow, material: DesktopWindowMaterial): void
 }
@@ -51,6 +52,13 @@ class MacPlatformStrategy implements ElectronPlatformStrategy {
   readonly canToggleShellMode = true
 
   private applicationName: string | undefined
+  private fileMenu: MenuItemConstructorOptions | undefined
+  private applicationMenuItems: readonly MenuItemConstructorOptions[] = []
+
+  setFileMenu(menu: MenuItemConstructorOptions | undefined): void {
+    this.fileMenu = menu
+    this.refreshApplicationMenu(this.applicationMenuItems)
+  }
 
   configureApplication(
     icon: NativeImage,
@@ -63,14 +71,17 @@ class MacPlatformStrategy implements ElectronPlatformStrategy {
   }
 
   refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[]): void {
+    this.applicationMenuItems = applicationMenuItems
     const applicationName = this.applicationName
     if (applicationName === undefined) return
     const locale = nativeMenuLocale(app.getPreferredSystemLanguages())
-    Menu.setApplicationMenu(Menu.buildFromTemplate(macApplicationMenuTemplate(
+    const template = macApplicationMenuTemplate(
       applicationName,
       locale,
       applicationMenuItems,
-    )))
+    )
+    if (this.fileMenu !== undefined) template[1] = this.fileMenu
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
   }
 
   configureWindow(_window: BrowserWindow): void {}

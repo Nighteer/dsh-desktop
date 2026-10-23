@@ -149,20 +149,20 @@ function response(): ServerResponse & {
 }
 
 describe('AA selection', () => {
-  it('persists before acknowledging and restarts only after the response', async () => {
+  it('rejects the retired adapter without changing stored preferences or restarting', async () => {
     let requested = false
     const restart = vi.fn()
     const controller = new DesktopSettingsController(bootstrap({
       readAa: () => ({ requested, effective: false }),
       selectAa: async enabled => { requested = enabled }, scheduleRestart: restart,
     }))
-    const operation = await controller.selectAa(true)
-    expect(requested).toBe(true)
-    expect(controller.read().aa).toEqual({ requested: true, effective: false })
-    expect(operation.response.restartRequired).toBe(true)
+    await expect(controller.selectAa(true)).rejects.toThrow('远程控制已从当前桌面版停用')
+    expect(requested).toBe(false)
+    expect(controller.read().aa).toEqual({ requested: false, effective: false })
     expect(restart).not.toHaveBeenCalled()
-    await operation.afterResponse?.()
-    expect(restart).toHaveBeenCalledOnce()
+    const res = response()
+    await handleDesktopAaSelectRequest(jsonRequest({enabled:true}),res,ORIGIN,controller)
+    expect(res.statusCode).toBe(410)
   })
   it('rejects forged bodies and cross-origin writes', async () => {
     const selectAa = vi.fn(async () => {})

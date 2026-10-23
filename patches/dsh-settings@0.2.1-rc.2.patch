@@ -1,0 +1,9 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -345,4 +345,5 @@
+ 	* composition rejects is logged and remains only in the renamed file. */
+ 	async importLegacyDocument() {
++		if (this.ownerContext.configEditor.preserveLegacyDocument === true) return;
+ 		const profile = this.ownerContext.profileContext;
+ 		const path = join(profile.home, "settings.yaml");

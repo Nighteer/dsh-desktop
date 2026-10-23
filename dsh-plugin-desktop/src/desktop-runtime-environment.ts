@@ -7,13 +7,13 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { join, win32 as windowsPath } from 'node:path'
 import { PNPM_IGNORE_MINIMUM_RELEASE_AGE } from './pnpm-policy.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
+import { publishRuntimeDirectory } from './publish-runtime-directory.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const DEFAULT_PROFILE = 'DSH_DESKTOP_DEFAULT_PROFILE'
@@ -27,6 +27,7 @@ const EXECUTABLE_FILE_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600
 const GENERATION_SCHEMA_VERSION = 1
 const GENERATION_NAME = /^(?<hash>[0-9a-f]{64})-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+const WINDOWS_GENERATION_NAME = /^(?<hash>[0-9a-f]{16})-[0-9a-f]{32}$/u
 const MANIFEST_NAME = '.generation.json'
 
 /** Inputs used to install one app-local pnpm command environment. */
@@ -276,7 +277,10 @@ function reportCleanupFailure(filename: string, cause: unknown): void {
 
 /** Materialize a new generation privately, then publish it under a never-reused name. */
 function createRuntimeGeneration(generationsDir: string, plan: RuntimeGenerationPlan): string {
-  const temporaryRoot = join(generationsDir, `.staging.${process.pid}.${randomUUID()}`)
+  const windows = plan.platform === 'win32'
+  const temporaryRoot = join(generationsDir, windows
+    ? `.s-${randomUUID().replaceAll('-', '')}`
+    : `.staging.${process.pid}.${randomUUID()}`)
   mkdirSync(temporaryRoot, { mode: DIRECTORY_MODE })
   chmodSync(temporaryRoot, DIRECTORY_MODE)
   try {
@@ -292,8 +296,14 @@ function createRuntimeGeneration(generationsDir: string, plan: RuntimeGeneration
       writeFileSync(filename, artifact.contents, { encoding: 'utf8', flag: 'wx', mode: artifact.mode })
       chmodSync(filename, artifact.mode)
     }
-    const root = join(generationsDir, `${plan.contentHash}-${randomUUID()}`)
-    renameSync(temporaryRoot, root)
+    // Keep cmd.exe entry paths below MAX_PATH for account-isolated homes.
+    // The full hash and exact artifact contents remain verified in the manifest;
+    // a random 128-bit suffix preserves immutable, never-reused publications.
+    const name = windows
+      ? `${plan.contentHash.slice(0, 16)}-${randomUUID().replaceAll('-', '')}`
+      : `${plan.contentHash}-${randomUUID()}`
+    const root = join(generationsDir, name)
+    publishRuntimeDirectory(temporaryRoot, root)
     return root
   } catch (cause) {
     try {
@@ -313,8 +323,12 @@ function installRuntimeGeneration(stateDir: string, plan: RuntimeGenerationPlan)
   const entries = readdirSync(generationsDir)
   let root: string | undefined
   for (const entry of entries.sort()) {
-    const match = GENERATION_NAME.exec(entry)
-    if (match?.groups?.hash !== plan.contentHash) continue
+    // Do not reuse legacy long Windows names, even when their contents match.
+    // They may still be leased by running children, so leave them untouched.
+    const windows = plan.platform === 'win32'
+    const match = (windows ? WINDOWS_GENERATION_NAME : GENERATION_NAME).exec(entry)
+    const hash = windows ? plan.contentHash.slice(0, 16) : plan.contentHash
+    if (match?.groups?.hash !== hash) continue
     const candidate = join(generationsDir, entry)
     if (reusableGeneration(candidate, plan)) {
       root = candidate

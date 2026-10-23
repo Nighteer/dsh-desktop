@@ -44,6 +44,12 @@ describe('desktop npm launcher', () => {
       .toBe('/Users/example/Library/Application Support/DSH Desktop')
   })
 
+  it('uses DSH_DESKTOP_USER_DATA_DIR without requiring the platform default', () => {
+    expect(defaultDesktopUserDataDirectory('win32', {
+      DSH_DESKTOP_USER_DATA_DIR: 'D:\\workspace\\desktop',
+    }, 'ignored')).toBe('D:\\workspace\\desktop')
+  })
+
   it('exports diagnostics without launching Electron', async () => {
     const userDataDir = mkdtempSync(join(tmpdir(), 'dsh-cli-diagnostics-'))
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsScope } from '../src/catalog/settings-scope.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID } from '../src/adapters/dsh-1024store.js'
 import type { MarketSettingsDocument } from '../src/catalog/source-store.js'
@@ -27,9 +27,7 @@ function memoryScope(): SettingsScope<MarketSettingsDocument> {
   let document: MarketSettingsDocument = { sources: [] }
   return {
     get: () => document,
-    watch: () => () => {},
     update: vi.fn(async patch => { document = { ...document, ...patch } as MarketSettingsDocument }),
-    replace: vi.fn(async section => { document = section as MarketSettingsDocument }),
   }
 }
 

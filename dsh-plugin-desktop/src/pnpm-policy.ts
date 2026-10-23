@@ -13,8 +13,8 @@ export function withDesktopPnpmPolicy(argv: readonly string[]): string[] {
 }
 
 /**
- * `dsh plugin` ultimately resolves the Desktop pnpm shim, which owns the one
- * policy argument. Remove an eagerly forwarded copy before that boundary.
+ * The final Desktop pnpm shim or native CLI package-manager descriptor owns
+ * the one policy argument. Remove an eagerly forwarded copy before that boundary.
  */
 export function withoutForwardedDesktopPnpmPolicy(argv: readonly string[]): string[] {
   if (argv[0] !== 'plugin') return [...argv]

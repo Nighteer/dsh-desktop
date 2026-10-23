@@ -13,7 +13,7 @@ import { DSHFIND_ADAPTER_ID, DSHFIND_KEY, DSHFIND_PROVIDER_ID } from '../src/ada
 import { standardHttpAdapter } from '../src/adapters/standard-http.js'
 import { DefaultCatalogService, type CatalogFullIndex } from '../src/catalog/service.js'
 import { MemoryCatalogSourceStore, SettingsCatalogSourceStore } from '../src/catalog/source-store.js'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsScope } from '../src/catalog/settings-scope.js'
 import type {
   CatalogHttpClient,
   CatalogProviderPage,

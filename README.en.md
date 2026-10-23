@@ -1,8 +1,10 @@
 <p align="center">
-  <a href="https://dshdesktop.cn"><img src="assets/desktop-hero-en.png" alt="DSH Desktop, an open-source desktop client built on DeepSeek Harness" width="100%"></a>
+  <a href="https://dshdesktop.cn"><img src="assets/desktop-hero-en.png" alt="LETSDSH Desktop, an open-source desktop client built on DeepSeek Harness" width="100%"></a>
 </p>
 
-<h1 align="center">DSH Desktop</h1>
+<h1 align="center">LETSDSH Desktop</h1>
+
+See [enterprise development and acceptance](docs/enterprise-development.en.md) for accounts and administration. Enterprise and ordinary development entries are separate; initialize the local identity service before first use.
 
 <p align="center">
   <strong>An open-source desktop client for Windows and macOS, built on DeepSeek Harness.</strong>
@@ -17,7 +19,7 @@
 <p align="center"><sub>An independent community project, not affiliated with, authorized by, or endorsed by DeepSeek.<br>No DeepSeek employee or official upstream DeepSeek Harness team member currently participates in this repository; upstream contributors shown by GitHub are inherited from synchronized fork history.<br><a href="README.md">中文</a> · English</sub></p>
 
 <p align="center">
-  <img src="assets/desktop-chat-en.png" alt="DSH Desktop chat interface in English" width="100%">
+  <img src="assets/desktop-chat-en.png" alt="LETSDSH Desktop chat interface in English" width="100%">
 </p>
 
 <p align="center">
@@ -29,7 +31,7 @@
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows-4493F8?style=flat-square" alt="Supported platforms: macOS and Windows">
 </p>
 
-DSH Desktop integrates the local Web UI, Host service, and plugin system from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) into a native desktop application. It runs a pinned upstream version unchanged, while DSH Desktop provides the window, tray, terminal, updates, and work profiles through the plugin mechanism provided by DeepSeek Harness.
+LETSDSH Desktop integrates the local Web UI, Host service, and plugin system from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) into a native desktop application. It runs a pinned upstream version unchanged, while LETSDSH Desktop provides the window, tray, terminal, updates, and work profiles through the plugin mechanism provided by DeepSeek Harness. The existing `dsh-plugin-desktop` package names, application IDs, and user-data directories remain unchanged so installed applications and Profiles can upgrade safely.
 
 <a id="run"></a>
 
@@ -40,7 +42,7 @@ Current release installers support Windows x64 and macOS Universal. No extra env
 | Platform | Download | Installation |
 | --- | --- | --- |
 | Windows x64 | [Download installer](https://www.dshdesktop.cn/api/downloads/windows) | Run the NSIS installer and follow its prompts |
-| macOS Universal | [Download DMG](https://www.dshdesktop.cn/api/downloads/mac) | Open the DMG and drag DSH Desktop into Applications |
+| macOS Universal | [Download DMG](https://www.dshdesktop.cn/api/downloads/mac) | Open the DMG and drag LETSDSH Desktop into Applications |
 
 See the [user guide](docs/user-guide.en.md) and [FAQ](docs/faq.en.md) for plugin commands, platform details, and troubleshooting.
 
@@ -168,6 +170,8 @@ git submodule update --init --recursive
 corepack yarn install --immutable
 corepack yarn dev
 ```
+
+For browser UI development, run `corepack yarn dev:web:beta` (Beta, port 5174) or `corepack yarn dev:web` (Stable, port 5173). Build the selected desktop package once beforehand. The command starts the real loopback Host, opens a browser, and watches that package's `src/client/**`; saving source rebuilds the client and automatically refreshes the page. Development data stays in the separate `.runtime-dsh-home/web-beta` or `web-stable` directory. The preview defaults to extended layout; `DSH_DESKTOP_DEV_MODE` and `DSH_DESKTOP_DEV_PORT` select the mode and port. Native Electron operations still need desktop debugging, and `src/native-ui/**` is outside this watcher. Pass `--no-open` to start only the service; Ctrl+C stops the Host and watcher.
 
 Use `corepack yarn check` for the headless gate. The [architecture](docs/architecture.en.md) and package [`README`](dsh-plugin-desktop/README.md) describe the full build, test, and release boundaries. See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for how to contribute.
 

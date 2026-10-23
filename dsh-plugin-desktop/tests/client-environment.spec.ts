@@ -48,6 +48,7 @@ describe('desktop client environment', () => {
         'sidebar.brand.mark',
         'settings.section',
         'settings.action',
+        ...(platform==='win32'?['conversation.hero.workspace.directoryFlow','sidebar.workspaces.directoryFlow']:[]),
       ])
       expect(effect.mock.calls.map(([, label]) => label)).not.toContain('desktop: independent compatibility frame styles')
     } finally {
@@ -191,6 +192,7 @@ describe('advanced desktop layout', () => {
 
     try {
       const dispose = installDesktopOwnedStyles()
+      expect(css).toMatch(/\.dshDesktopFrame \{[^}]*overflow: clip;/)
       expect(css).toMatch(/\.dshDesktopFrame \{[^}]*transition: grid-template-columns var\(--ds-transition-duration-slow\) var\(--ds-ease-in-out\);/)
       expect(css).toMatch(/\.dshDesktopFrame\[data-dragging\] \{ transition: none; \}/)
       expect(css).toContain('min-height: 0; overflow: visible;')

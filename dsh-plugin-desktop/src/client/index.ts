@@ -16,6 +16,14 @@ import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { installSidebarFooterStyles } from './sidebar-footer-styles.ts'
 import { applyLetsBrand } from './lets-brand.tsx'
+import { applyEnterpriseApplications } from './enterprise-applications.tsx'
+import {applyNativeWorkspaceFlow} from './native-workspace-flow.tsx'
+import {applyCompactToolbar} from './compact-toolbar.tsx'
+import {applyEnterpriseAccount} from './enterprise-account.tsx'
+import {applyEnterpriseSettingsLauncher} from './enterprise-settings-launcher.tsx'
+import {applyDesktopPluginManager} from './desktop-plugin-manager.tsx'
+import {applyEnterpriseResources} from './enterprise-resources.tsx'
+import {applyEnterpriseKnowledge} from './enterprise-knowledge.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
@@ -75,7 +83,7 @@ export const inject = [
   'locale',
   'connection',
   'remote',
-  'settingsScope',
+  'configForms',
   'sessions',
   'theme',
   'uiRenderer',
@@ -86,6 +94,11 @@ export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
   if (!environment) return
   applyLetsBrand(ctx)
+  applyEnterpriseApplications(ctx)
+  applyEnterpriseAccount(ctx)
+  applyEnterpriseSettingsLauncher(ctx)
+  applyEnterpriseResources(ctx)
+  applyEnterpriseKnowledge(ctx)
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
     'dsh-plugin-desktop: native window geometry service',
@@ -102,6 +115,7 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: renderer boot health report',
   )
   if (environment.platform === 'win32') {
+    applyNativeWorkspaceFlow(ctx)
     ctx.effect(
       () => installDesktopDirectoryPickerBridge(),
       'dsh-plugin-desktop: native directory picker bridge',
@@ -109,4 +123,6 @@ export function apply(ctx: ClientContext): void {
   }
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
   if (environment.mode === 'extended') applyExtendedShell(ctx, environment, desktopSettings)
+  applyCompactToolbar(ctx,environment)
+  applyDesktopPluginManager(ctx, environment)
 }

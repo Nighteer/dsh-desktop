@@ -106,7 +106,7 @@ export class DesktopSettingsController {
           this.bootstrap.profiles.canDelete?.(profile.name) ?? false,
         )),
       ),
-      aa: Object.freeze(this.bootstrap.readAa?.() ?? { requested: false, effective: false }),
+      aa: Object.freeze({ requested: false, effective: false }),
       market: projectMarket(this.bootstrap.readMarket(), this.effectiveMarket),
       web: Object.freeze({
         localUrl: web.localUrl,
@@ -157,14 +157,8 @@ export class DesktopSettingsController {
     })
   }
 
-  async selectAa(enabled: boolean): Promise<DesktopSettingsPostResponse<DesktopMarketSelectResponse>> {
-    if (!this.bootstrap.selectAa || !this.bootstrap.readAa) throw new Error('AA selection is unavailable')
-    await this.bootstrap.selectAa(enabled)
-    const restartRequired = enabled !== this.bootstrap.readAa().effective
-    return Object.freeze({
-      response: Object.freeze({ accepted: true, restartRequired }),
-      ...(restartRequired ? { afterResponse: () => { this.bootstrap.scheduleRestart() } } : {}),
-    })
+  async selectAa(_enabled: boolean): Promise<DesktopSettingsPostResponse<DesktopMarketSelectResponse>> {
+    throw new Error('远程控制已从当前桌面版停用，原配置和数据保留。')
   }
 
   /** Open the native terminal through the launcher-owned action. */

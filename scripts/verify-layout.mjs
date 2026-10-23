@@ -17,6 +17,9 @@ const stablePlugin = readJson('dsh-plugin-desktop/package.json')
 const betaPlugin = readJson('dsh-plugin-desktop-beta/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
 const market = readJson('dsh-community-market/package.json')
+const ppt = readJson('dsh-ppt-runtime/package.json')
+const enterprisePackages = ['dsh-enterprise-contracts', 'dsh-enterprise-server', 'dsh-enterprise-admin']
+  .map(name => [name, readJson(`${name}/package.json`)])
 const upstreamPackage = readJson('deepseek-harness/package.json')
 
 if (stablePlugin.name !== 'dsh-plugin-desktop') fail('the stable Desktop workspace must retain dsh-plugin-desktop')
@@ -33,16 +36,32 @@ if (JSON.stringify(workspace.workspaces) !== JSON.stringify([
   'dsh-plugin-desktop-beta',
   'dsh-community-fabric',
   'dsh-community-market',
+  'dsh-enterprise-contracts',
+  'dsh-enterprise-server',
+  'dsh-enterprise-admin',
+  'dsh-ppt-runtime',
 ])) {
-  fail('the root Yarn workspace must contain the desktop, community-fabric, and community-market packages')
+  fail('the root Yarn workspace must contain the declared desktop, community, enterprise, and PPT packages')
 }
 for (const [name, manifest] of [
   ['dsh-plugin-desktop', stablePlugin],
   ['dsh-plugin-desktop-beta', betaPlugin],
   ['dsh-community-fabric', fabric],
   ['dsh-community-market', market],
+  ['dsh-ppt-runtime', ppt],
+  ...enterprisePackages,
 ]) {
   if (manifest.packageManager !== undefined) fail(`${name} must inherit the root Yarn release`)
+}
+if (ppt.name !== 'dsh-ppt' || ppt.private !== true) fail('PPT must remain a private desktop-owned workspace')
+for (const filename of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package-lock.json']) {
+  if (existsSync(resolve(root, 'dsh-ppt-runtime', filename))) fail(`dsh-ppt-runtime/${filename} bypasses root Yarn`)
+}
+for (const [name, manifest] of enterprisePackages) {
+  if (manifest.name !== name || manifest.private !== true) fail(`${name} must remain a correctly named private workspace`)
+  for (const legacyFile of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package-lock.json']) {
+    if (existsSync(resolve(root, name, legacyFile))) fail(`${name}/${legacyFile} bypasses the root Yarn workspace`)
+  }
 }
 if (fabric.name !== 'dsh-community-fabric') fail('the Fabric workspace must own dsh-community-fabric')
 if (market.name !== 'dsh-community-market') fail('the market workspace must own dsh-community-market')
@@ -86,10 +105,13 @@ for (const [owner, manifest] of [
   ['beta desktop', betaPlugin],
   ['fabric', fabric],
   ['market', market],
+  ['ppt', ppt],
+  ...enterprisePackages,
 ]) {
   for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'resolutions']) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {
       if (typeof range !== 'string') continue
+      if (range === 'workspace:*' && ['dsh-enterprise-contracts', 'dsh-enterprise-admin', 'dsh-ppt'].includes(name)) continue
       if (/^(?:workspace|portal|link):/u.test(range)
         || (range.startsWith('file:') && range.includes('deepseek-harness'))) {
         fail(`${owner} ${field}.${name} bypasses the published DSH package boundary`)

@@ -1,11 +1,22 @@
-import { readFileSync, unlinkSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopShellSpec } from '../src/runtime.ts'
+import type { EnterpriseDesktopUpdates } from '../src/enterprise-desktop-updates.ts'
+function withEnterpriseUpdates<T extends {enterpriseUpdates:EnterpriseDesktopUpdates|undefined}>(runtime:T):T {
+  runtime.enterpriseUpdates={
+    release:(_channel:string,version:string)=>({version,sha256:'a'.repeat(64),size:1024,notes:'Enterprise release notes'}),
+    request:(url:string,init:RequestInit)=>electron.net.fetch(url,init),
+  } as unknown as EnterpriseDesktopUpdates
+  return runtime
+}
 import { desktopTrayLabel } from '../src/tray-locale.ts'
+import { desktopNotificationIcon } from '../src/desktop-notification-branding.ts'
 import { DESKTOP_FRAME_HEIGHT } from '../src/window-chrome.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
+// Native bridge policy has its own dedicated tests; keep the shell fixture small.
+vi.mock('../src/native-capabilities.ts', () => ({bindNativeCapabilities: () => async () => {}}))
 const diagnostics = vi.hoisted(() => ({ export: vi.fn() }))
 const updater = vi.hoisted(() => ({
   download: vi.fn(),
@@ -40,17 +51,20 @@ const childProcess = vi.hoisted(() => {
   }
 })
 
-const MAIN_WINDOW_STATE_PATH = '/tmp/dsh-desktop-user-data/main-window-state.json'
+const windowState = vi.hoisted(() => ({value: undefined as import('../src/main-window-state.ts').MainWindowBounds | undefined}))
+vi.mock('../src/main-window-state.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/main-window-state.ts')>(),
+  FileMainWindowStateStore: class {
+    read() {return windowState.value}
+    write(value: import('../src/main-window-state.ts').MainWindowBounds) {windowState.value = {...value}}
+  },
+}))
 const PRODUCT_VERSION = (JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { readonly version: string }).version
 
 function clearMainWindowState(): void {
-  try {
-    unlinkSync(MAIN_WINDOW_STATE_PATH)
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
-  }
+  windowState.value = undefined
 }
 
 vi.mock('../src/desktop-terminal.ts', async (importOriginal) => ({
@@ -352,6 +366,14 @@ const spec: DesktopShellSpec = {
 }
 
 describe('Electron desktop runtime', () => {
+  it('cannot access a public update server without a logged-in enterprise',async()=>{
+    const {ElectronDesktopRuntime}=await import('../src/electron-runtime.ts')
+    const isolated=new ElectronDesktopRuntime(async()=>{})
+    expect(isolated.updates.canDownload).toBe(false)
+    await expect(isolated.updates.request('/api/v1/desktop-updates/check',{})).rejects.toThrow('企业更新服务')
+    await expect(isolated.updates.downloadAndOpen('1.0.1',new AbortController().signal)).rejects.toThrow('重新检查企业版本')
+    expect(electron.net.fetch).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     clearMainWindowState()
     electron.app.isPackaged = false
@@ -401,7 +423,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.app.getPreferredSystemLanguages.mockReturnValue(['zh-Hans-CN', 'en-US'])
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     expect(electron.browserWindowOptions).toHaveLength(0)
@@ -428,12 +450,14 @@ describe('Electron desktop runtime', () => {
     expect(options).not.toHaveProperty('titleBarOverlay')
     expect(electron.contentViews).toHaveLength(2)
     expect(electron.contentViews[1]?.options).toEqual({ webPreferences: {
-      preload: expect.stringMatching(/\/preload\.cjs$/),
+      preload: expect.stringMatching(/[\\/]preload\.cjs$/),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
       partition: 'persist:dsh-desktop-renderer',
+      webviewTag: true,
+      additionalArguments: ['--lets-desktop-origin=' + new URL(spec.url).origin],
     } })
     expect(electron.contentViews[1]?.setBounds).toHaveBeenCalledWith({ x: 0, y: 36, width: 1280, height: 804 })
     expect(electron.chromeWebContents.loadFile).toHaveBeenCalledWith(expect.stringMatching(/compatibility-chrome\.html$/))
@@ -470,7 +494,7 @@ describe('Electron desktop runtime', () => {
   it('attaches the renderer capability to same-origin HTTP and WebSocket requests only', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -656,7 +680,7 @@ describe('Electron desktop runtime', () => {
     const store = new FileMainWindowStateStore('/tmp/dsh-desktop-user-data')
     store.write({ x: 260, y: 140, width: 1440, height: 900 })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -698,7 +722,7 @@ describe('Electron desktop runtime', () => {
       workArea: { x: 0, y: 24, width: 1440, height: 876 },
     })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -718,7 +742,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.sessionFetch.mockResolvedValueOnce(new Response(null, { status: 401 }))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.schedule(spec)
 
     await expect(runtime.mountScheduled()).rejects.toThrow(
@@ -733,7 +757,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.sessionFetch.mockResolvedValueOnce(new Response(null, { status: 503 }))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.schedule(spec)
 
     await expect(runtime.mountScheduled()).rejects.toThrow(
@@ -747,7 +771,7 @@ describe('Electron desktop runtime', () => {
   it('reloads the renderer and toggles Developer Tools only for a mounted generation', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
 
     expect(() => { runtime.reloadRenderer() }).toThrow('active shell generation')
     expect(() => { runtime.toggleDeveloperTools() }).toThrow('active shell generation')
@@ -768,7 +792,7 @@ describe('Electron desktop runtime', () => {
   it('uses the Windows caption, hidden menu bar, removed menu, and fixed blue tray image', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -792,7 +816,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
     electron.app.isPackaged = true
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -815,7 +839,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\Work'] })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -836,7 +860,7 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const query = vi.fn(() => ({ root: 'E:\\', fileSystem: 'EXFAT', driveType: 2 }))
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger, query)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, undefined, logger, query))
 
     await expect(runtime.validateDirectory('E:\\repo')).resolves.toBe(false)
     expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
@@ -854,7 +878,7 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const query = vi.fn(() => ({ root: 'E:\\', fileSystem: 'NTFS', driveType: 2 }))
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger, query)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, undefined, logger, query))
 
     await expect(runtime.validateDirectory('E:\\repo')).resolves.toBe(false)
     expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
@@ -874,7 +898,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, undefined, logger))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -894,7 +918,7 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn(() => true)
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot, logger)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, onRendererBoot, logger))
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
@@ -921,7 +945,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn(() => true)
-    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, onRendererBoot))
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
@@ -948,7 +972,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime, RENDERER_BOOT_TIMEOUT_MS } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn(() => true)
-    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, onRendererBoot))
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
@@ -972,7 +996,7 @@ describe('Electron desktop runtime', () => {
     electron.loadURL.mockImplementationOnce(() => new Promise<void>((resolve) => { finishLoad = resolve }))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const commitHealthy = vi.fn(async () => {})
-    const runtime = new ElectronDesktopRuntime(async () => {}, () => true)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, () => true))
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy })
     const mounted = runtime.mountScheduled()
@@ -997,7 +1021,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
-    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, onRendererBoot))
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
@@ -1021,7 +1045,7 @@ describe('Electron desktop runtime', () => {
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
       const restart = vi.fn(async () => {})
       const logger = { error: vi.fn(), errorCause: vi.fn() }
-      const runtime = new ElectronDesktopRuntime(restart, undefined, logger)
+      const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart, undefined, logger))
       const release = runtime.schedule(spec)
       const commitHealthy = vi.fn(async () => {})
       const boot = runtime.beginRendererBootMonitoring({ commitHealthy })
@@ -1276,7 +1300,7 @@ describe('Electron desktop runtime', () => {
   it('starts from the saved locale and rebuilds native tray commands when it changes', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const readLocalePreference = vi.fn(() => 'zh' as const)
     const release = runtime.schedule({ ...spec, readLocalePreference })
 
@@ -1315,7 +1339,7 @@ describe('Electron desktop runtime', () => {
   it('handles desktop zoom shortcuts without relying on the native menu', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1369,7 +1393,7 @@ describe('Electron desktop runtime', () => {
   it('does not block a sandboxed iframe from navigating to an external origin', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1403,7 +1427,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, undefined, logger))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1437,7 +1461,7 @@ describe('Electron desktop runtime', () => {
   it('protects the main-frame origin across redirects while leaving iframe redirects alone', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1468,7 +1492,7 @@ describe('Electron desktop runtime', () => {
   it('shows and hides one native window through ready, activation, tray, and close events', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1513,7 +1537,7 @@ describe('Electron desktop runtime', () => {
   it('reveals the startup surface before ready-to-show and does not re-show a visible window', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1536,7 +1560,7 @@ describe('Electron desktop runtime', () => {
   it('does not restore or focus a minimized window when ready-to-show arrives late', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -1557,7 +1581,7 @@ describe('Electron desktop runtime', () => {
   it('does not re-show a window hidden to the tray before ready-to-show', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1583,10 +1607,10 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
-  it('shows privacy-safe macOS attention only while unfocused and clears it on notification click', async () => {
+  it('shows completion notifications in foreground and background without stealing focus', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -1599,6 +1623,7 @@ describe('Electron desktop runtime', () => {
     expect(electron.notifications[0]?.options).toEqual({
       title: 'Turn Completed',
       body: 'A direct user turn has finished.',
+      icon: desktopNotificationIcon(),
     })
     const click = electron.notifications[0]?.once.mock.calls.find(([event]) => event === 'click')?.[1]
     expect(click).toEqual(expect.any(Function))
@@ -1608,16 +1633,36 @@ describe('Electron desktop runtime', () => {
     expect(window?.focus).toHaveBeenCalledTimes(2)
 
     window?.isFocused.mockReturnValue(true)
-    runtime.notifyAttention({ title: 'Ignored', body: 'Focused window' })
-    expect(electron.notifications).toHaveLength(2)
+    runtime.notifyAttention({ title: 'LETS · 回复已完成', body: '本轮回复已结束。' })
+    expect(electron.notifications).toHaveLength(3)
+    expect(electron.app.setBadgeCount.mock.calls).toEqual([[1], [2], [0]])
+    expect(window?.show).toHaveBeenCalledTimes(2)
+    expect(window?.focus).toHaveBeenCalledTimes(2)
 
+    await release()
+  })
+
+  it('shows foreground Windows completion without flashing or activating the window', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+    const window = electron.browserWindows[0]!
+    window.isFocused.mockReturnValue(true)
+    const focusCount = window.focus.mock.calls.length
+    runtime.notifyAttention({title:'LETS · 回复已完成',body:'本轮回复已结束。'})
+    expect(electron.notifications).toHaveLength(1)
+    expect(electron.notifications[0]?.show).toHaveBeenCalledOnce()
+    expect(window.flashFrame).not.toHaveBeenCalledWith(true)
+    expect(window.focus).toHaveBeenCalledTimes(focusCount)
     await release()
   })
 
   it('leaves macOS fullscreen before hiding and restores fullscreen when reopened', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -1654,7 +1699,7 @@ describe('Electron desktop runtime', () => {
   it('reveals and restores macOS fullscreen when reopened during the exit transition', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -1679,7 +1724,7 @@ describe('Electron desktop runtime', () => {
   it('flashes the Windows taskbar and clears attention on focus and release', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
 
@@ -1700,7 +1745,7 @@ describe('Electron desktop runtime', () => {
   it('restores a hidden macOS application before revealing its window without stealing focus when already visible', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -1734,7 +1779,7 @@ describe('Electron desktop runtime', () => {
   it('releases the window and tray when post-load startup wiring fails', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     const beforeInteractive = vi.fn(() => {
       throw new Error('interactive wiring failed')
@@ -1764,7 +1809,7 @@ describe('Electron desktop runtime', () => {
   it('does not mount a registration disposed before Host boot settles', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
 
     await release()
@@ -1780,7 +1825,7 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     let finishLoad!: () => void
     electron.loadURL.mockImplementationOnce(() => new Promise<void>((resolve) => { finishLoad = resolve }))
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     const beforeInteractive = vi.fn(() => {
       expect(electron.trays).toHaveLength(1)
@@ -1808,7 +1853,7 @@ describe('Electron desktop runtime', () => {
       vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
       const requestModeChange = vi.fn(async () => {})
-      const runtime = new ElectronDesktopRuntime(async () => {})
+      const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
       const release = runtime.schedule({ ...spec, mode, requestModeChange, readLocalePreference: () => locale })
       await runtime.mountScheduled()
 
@@ -1847,7 +1892,7 @@ describe('Electron desktop runtime', () => {
   it('rebuilds ordered effect-scoped tray contributions without replacing native commands', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const later = runtime.registerTrayItem({
       group: 'tools',
       order: 20,
@@ -1904,7 +1949,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const invoke = vi.fn()
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.registerTrayItem({
       group: 'profiles',
       order: 10,
@@ -1951,7 +1996,7 @@ describe('Electron desktop runtime', () => {
     })
     try {
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-      const runtime = new ElectronDesktopRuntime(async () => {})
+      const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
       const userDataPath = electron.app.getPath('userData')
       runtime.configureTerminal({
         profileName: 'desktop',
@@ -1989,7 +2034,7 @@ describe('Electron desktop runtime', () => {
 
   it('coalesces concurrent diagnostic exports and reveals the completed archive', async () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     let finishExport: ((path: string) => void) | undefined
     diagnostics.export.mockReturnValue(new Promise(resolve => { finishExport = resolve }))
 
@@ -2013,7 +2058,7 @@ describe('Electron desktop runtime', () => {
   it('does not export diagnostics when the privacy confirmation is cancelled', async () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
 
     await expect(runtime.exportDiagnostics()).resolves.toBeUndefined()
 
@@ -2034,7 +2079,7 @@ describe('Electron desktop runtime', () => {
   it('localizes the diagnostics privacy confirmation', async () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.setLocalePreference('zh')
 
     await runtime.exportDiagnostics()
@@ -2051,7 +2096,7 @@ describe('Electron desktop runtime', () => {
   it('shows a native error when diagnostic export fails', async () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     diagnostics.export
       .mockRejectedValueOnce(new Error('disk is full'))
       .mockResolvedValueOnce('C:\\Users\\Example\\diagnostics-retry.zip')
@@ -2079,7 +2124,7 @@ describe('Electron desktop runtime', () => {
     })
     try {
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-      const runtime = new ElectronDesktopRuntime(async () => {})
+      const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
       runtime.configureTerminal({
         profileName: 'desktop',
         profileDir: 'C:\\Users\\Example\\.dsh\\profiles\\desktop',
@@ -2114,7 +2159,7 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 2, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
-    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, onRendererBoot))
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     const report = {
       status: 'failed' as const,
@@ -2145,7 +2190,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const runtime = new ElectronDesktopRuntime(async () => {}, () => {}, logger)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, () => {}, logger))
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
     runtime.reportRendererBoot({
@@ -2165,7 +2210,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
-    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, onRendererBoot))
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
@@ -2186,7 +2231,7 @@ describe('Electron desktop runtime', () => {
     })
     try {
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-      const runtime = new ElectronDesktopRuntime(async () => {})
+      const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
       const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
       runtime.configureTerminal({
         profileName: 'desktop',
@@ -2212,7 +2257,7 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async () => {})
-    const runtime = new ElectronDesktopRuntime(restart)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
     runtime.reportRendererBoot({ status: 'failed', plugins: ['dsh-vision-router'] })
@@ -2220,12 +2265,38 @@ describe('Electron desktop runtime', () => {
     await vi.waitFor(() => { expect(restart).toHaveBeenCalledOnce() })
   })
 
+  it('delegates ordinary restart confirmation to the launcher task guard when installed', async () => {
+    const {ElectronDesktopRuntime} = await import('../src/electron-runtime.ts')
+    const restart = vi.fn(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
+    runtime.taskTransitionsProtected = true
+    await runtime.requestRestart()
+    expect(restart).toHaveBeenCalledOnce()
+    expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
+  })
+
+  it('does not launch an installer or exit if the launcher task guard cancels', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    updater.download.mockResolvedValueOnce('C:\\Updates\\LETS-test.exe')
+    const {ElectronDesktopRuntime} = await import('../src/electron-runtime.ts')
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
+    const requestQuit = vi.fn()
+    runtime.schedule({...spec, requestQuit})
+    const guard = vi.fn(async (_launch: () => Promise<void>) => {})
+    runtime.protectUpdateInstall = guard
+    electron.dialog.showSaveDialog.mockResolvedValueOnce({canceled: false, filePath: 'C:\\Updates\\LETS-test.exe'})
+    await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
+    expect(guard).toHaveBeenCalledOnce()
+    expect(childProcess.spawn).not.toHaveBeenCalled()
+    expect(requestQuit).not.toHaveBeenCalled()
+  })
+
   it('requires Desktop dialog confirmation before an ordinary restart', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async (_target?: 'recovery' | 'safe-mode') => {})
-    const runtime = new ElectronDesktopRuntime(restart)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
 
     await runtime.requestRestart()
 
@@ -2245,7 +2316,7 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async (_target?: 'recovery' | 'safe-mode') => {})
-    const runtime = new ElectronDesktopRuntime(restart)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
 
     await runtime.requestRecoveryRestart()
 
@@ -2264,7 +2335,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async () => {})
-    const runtime = new ElectronDesktopRuntime(restart)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
     const registration = runtime.registerTrayItem({
       group: 'tools',
       order: 100,
@@ -2303,7 +2374,7 @@ describe('Electron desktop runtime', () => {
   it.each(['tray', 'application'] as const)('exits Safe Mode from the localized macOS %s menu', async surface => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const exitSafeMode = vi.fn(async () => {})
     const registration = runtime.registerTrayItem({
       group: 'status',
@@ -2337,7 +2408,7 @@ describe('Electron desktop runtime', () => {
   it('cancels, coalesces, and suppresses Safe Mode restart requests while quitting', async () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async () => {})
-    const runtime = new ElectronDesktopRuntime(restart)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
 
     await runtime.requestSafeModeRestart()
@@ -2365,7 +2436,7 @@ describe('Electron desktop runtime', () => {
   it('allows retrying Safe Mode after preparation fails', async () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async () => {}).mockRejectedValueOnce(new Error('Safe Mode preparation failed'))
-    const runtime = new ElectronDesktopRuntime(restart)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(restart))
 
     await expect(runtime.requestSafeModeRestart()).rejects.toThrow('Safe Mode preparation failed')
     await runtime.requestSafeModeRestart()
@@ -2381,12 +2452,12 @@ describe('Electron desktop runtime', () => {
     electron.net.fetch.mockResolvedValueOnce(response)
     updater.download.mockResolvedValueOnce('/tmp/DSH-Desktop-2.1.0-mac.dmg')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
     const activeWindow = electron.browserWindows[0]
 
-    await expect(runtime.updates.request('https://www.dshdesktop.cn/api/desktop/version', { method: 'GET' }))
+    await expect(runtime.updates.request('/api/v1/desktop-updates/check', { method: 'GET' }))
       .resolves.toBe(response)
     expect(runtime.updates).toMatchObject({
       isPackaged: false,
@@ -2405,17 +2476,29 @@ describe('Electron desktop runtime', () => {
     expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(
       activeWindow,
       expect.objectContaining({
-        title: 'DSH Desktop Is Up to Date',
-        detail: 'Installed version: 2.0.0',
+        title: 'LETS Desktop · Check for Updates',
+        detail: expect.stringContaining('Installed version: 2.0.0'),
+        presentation: 'product-info',
         buttons: ['OK'],
       }),
     )
+
+    await runtime.updates.showManualCheckResult({
+      status: 'update-available', currentVersion: '2.0.0', latestVersion: '2.1.0',
+    })
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(activeWindow, expect.objectContaining({
+      title: 'LETS Desktop · Check for Updates',
+      message: 'LETS Desktop 2.1.0 is available.',
+      detail: expect.stringMatching(/Installed version: 2\.0\.0[\s\S]*Published by your enterprise administrator/),
+      presentation: 'product-info',
+      buttons: ['OK'],
+    }))
 
     await runtime.updates.showManualCheckResult(null)
     expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(
       activeWindow,
       expect.objectContaining({
-        title: 'Unable to Check for Updates',
+        title: 'LETS Desktop · Check for Updates',
         buttons: ['OK'],
       }),
     )
@@ -2442,6 +2525,8 @@ describe('Electron desktop runtime', () => {
     expect(updater.download).toHaveBeenCalledWith({
       platform: 'darwin',
       version: '2.1.0',
+      expectedSha256: 'a'.repeat(64),
+      expectedSize: 1024,
       destinationPath: '/tmp/Downloads/DSH-Desktop-2.1.0-mac.dmg',
       request: expect.any(Function),
       signal: controller.signal,
@@ -2455,7 +2540,7 @@ describe('Electron desktop runtime', () => {
     expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(
       activeWindow,
       expect.objectContaining({
-        title: 'DSH Desktop Update Downloaded',
+        title: 'LETS Desktop · Check for Updates',
         buttons: ['OK'],
       }),
     )
@@ -2468,6 +2553,7 @@ describe('Electron desktop runtime', () => {
     expect(notification?.options).toEqual({
       title: 'Profile Recovered',
       body: 'Reopened the last-known-good profile.',
+      icon: desktopNotificationIcon(),
     })
     expect(notification?.show).toHaveBeenCalledOnce()
     expect(notification?.once).toHaveBeenCalledWith('click', expect.any(Function))
@@ -2484,7 +2570,7 @@ describe('Electron desktop runtime', () => {
     updater.download.mockResolvedValueOnce('C:\\Updates\\DSH-Desktop-2.1.0-windows.exe')
     const requestQuit = vi.fn()
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.schedule({ ...spec, requestQuit })
     electron.dialog.showSaveDialog.mockResolvedValueOnce({
       canceled: false,
@@ -2521,7 +2607,7 @@ describe('Electron desktop runtime', () => {
     updater.download.mockResolvedValueOnce('C:\\Updates\\DSH-Desktop-2.1.0-windows.exe')
     const requestQuit = vi.fn()
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.schedule({ ...spec, requestQuit })
     electron.dialog.showSaveDialog.mockResolvedValueOnce({
       canceled: false,
@@ -2548,7 +2634,7 @@ describe('Electron desktop runtime', () => {
     updater.download.mockResolvedValueOnce('C:\\Updates\\DSH-Desktop-2.1.0-windows.exe')
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     electron.dialog.showSaveDialog.mockResolvedValueOnce({
       canceled: false,
       filePath: 'C:\\Updates\\DSH-Desktop-2.1.0-windows.exe',
@@ -2571,7 +2657,7 @@ describe('Electron desktop runtime', () => {
     })
     const logger = { error: vi.fn(), errorCause: vi.fn() }
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}, undefined, logger))
 
     await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal))
       .resolves.toBeUndefined()
@@ -2585,7 +2671,7 @@ describe('Electron desktop runtime', () => {
   it('does not download when the update destination picker is cancelled', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
 
     await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
 
@@ -2606,7 +2692,7 @@ describe('Electron desktop runtime', () => {
     updater.pending.mockResolvedValueOnce(artifact)
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     runtime.schedule(spec)
 
     await runtime.mountScheduled()
@@ -2628,7 +2714,7 @@ describe('Electron desktop runtime', () => {
     updater.download.mockResolvedValueOnce('/tmp/DSH-Desktop-2.1.0-mac.dmg')
     electron.shell.openPath.mockResolvedValueOnce('Launch Services rejected the image')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     electron.dialog.showSaveDialog.mockResolvedValueOnce({
       canceled: false,
       filePath: '/tmp/DSH-Desktop-2.1.0-mac.dmg',
@@ -2647,7 +2733,7 @@ describe('Electron desktop runtime', () => {
       finishOpen = resolve
     }))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const controller = new AbortController()
     electron.dialog.showSaveDialog.mockResolvedValueOnce({
       canceled: false,
@@ -2667,7 +2753,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const readThemeSource = vi.fn(() => 'dark' as const)
     const release = runtime.schedule({
       ...spec,
@@ -2705,7 +2791,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule({
       ...spec,
       mode: 'advanced',
@@ -2733,7 +2819,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule({
       ...spec,
       mode: 'extended',
@@ -2762,7 +2848,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule({
       ...spec,
       mode: 'extended',
@@ -2792,7 +2878,7 @@ describe('Electron desktop runtime', () => {
     electron.nativeTheme.themeSource = 'light'
     electron.loadURL.mockRejectedValueOnce(new Error('renderer unavailable'))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const runtime = withEnterpriseUpdates(new ElectronDesktopRuntime(async () => {}))
     const release = runtime.schedule({
       ...spec,
       mode: 'advanced',

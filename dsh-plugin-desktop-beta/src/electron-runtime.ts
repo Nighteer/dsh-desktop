@@ -4,19 +4,20 @@ import {
   app,
   dialog,
   nativeTheme,
-  net,
   Notification,
   shell,
 } from 'electron'
 import { spawn } from 'node:child_process'
-import { RemoteControlOffer, remoteControlOfferCopy } from './remote-control-offer.ts'
+import {desktopNotificationOptions} from './desktop-notification-branding.ts'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-terminal.ts'
-import { showDesktopMessageBox } from './desktop-dialog-window.ts'
+import { showDesktopMessageBox, type DesktopMessageBoxOptions } from './desktop-dialog-window.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import { ElectronShellGeneration } from './electron-shell-generation.ts'
+import type { DesktopEnterpriseApplications } from './enterprise-applications.ts'
+import type { EnterpriseDesktopUpdates } from './enterprise-desktop-updates.ts'
 import { electronPlatformStrategy, type ElectronPlatformStrategy } from './electron-platform.ts'
 import type {
   DesktopNotification,
@@ -96,6 +97,11 @@ export const RENDERER_BOOT_TIMEOUT_MS = 30_000
 
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
+  /** Installed by the launcher; the existing update endpoints remain untouched. */
+  protectUpdateInstall: ((launch: () => Promise<void>) => Promise<void>) | undefined
+  taskTransitionsProtected = false
+  enterpriseApplications: DesktopEnterpriseApplications | undefined
+  enterpriseUpdates: EnterpriseDesktopUpdates | undefined
   readonly platform: DesktopPlatform
   readonly windowsBuild: number | undefined
   private readonly platformStrategy: ElectronPlatformStrategy
@@ -139,16 +145,26 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       logError: message => { this.logError(message) },
       ...(workspaceVolumeQuery === undefined ? {} : { volumeQuery: workspaceVolumeQuery }),
     })
+    const runtime = this
     this.updates = {
       get isPackaged() { return app.isPackaged },
-      get canDownload() { return app.isPackaged && platformStrategy.updateDownloadPlatform !== undefined },
+      get canDownload() { return app.isPackaged && platformStrategy.updateDownloadPlatform !== undefined && runtime.enterpriseUpdates !== undefined },
       get currentVersion() { return PRODUCT_VERSION },
       get releaseChannel() { return DESKTOP_RELEASE_CHANNEL },
       get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },
       ...(installationId === undefined ? {} : { installationId }),
-      request: (url, init) => net.fetch(url, init),
+      request: (url, init) => {
+        if (!this.enterpriseUpdates) return Promise.reject(new Error('请先连接企业更新服务'))
+        return this.enterpriseUpdates.request(url, init)
+      },
       confirmDownload: (version, channel) => this.confirmUpdateDownload(version, channel),
       showManualCheckResult: result => this.showManualUpdateCheckResult(result),
+      showDownloadFailure: async () => {
+        const english=this.currentLocale==='en'
+        await this.showUpdateMessageBox({type:'warning',title:english?'LETS Desktop · Update Failed':'LETS Desktop · 更新失败',
+          message:english?'The installer could not be downloaded or verified.':'安装包下载或校验失败',
+          detail:english?'Check for updates again. If this continues, contact your enterprise administrator.':'请重新检查更新后再试；若持续失败，请联系企业管理员检查安装包或发布状态。',buttons:[desktopNativeCopy(this.currentLocale).ok]})
+      },
       downloadAndOpen: (version, signal, channel) => this.downloadAndOpenUpdate(version, signal, channel),
       notify: notification => { this.showNotification(notification) },
     }
@@ -229,20 +245,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     }
     if (this.mountTask === undefined) {
       this.setLocalePreference(spec.readLocalePreference())
-      const remoteOffer = spec.readRemoteControl && spec.enableRemoteControl ? new RemoteControlOffer({
-        path: join(app.getPath('userData'), 'remote-control-offer-seen'),
-        readEnabled: spec.readRemoteControl,
-        enable: spec.enableRemoteControl,
-        confirm: async copy => (await this.showDesktopMessageBox({
-          type: 'question', title: copy.title, message: copy.message, detail: copy.detail,
-          buttons: [copy.confirm, copy.cancel], defaultId: 1, cancelId: 1, noLink: true,
-        })).response === 0,
-        reportError: cause => this.logError(`Remote control notice: ${String(cause)}`),
-      }) : undefined
       const generation = new ElectronShellGeneration({
         platform: this.platformStrategy,
         spec,
         preloadPath: desktopPreloadPath(),
+        ...(this.enterpriseApplications ? {attachEnterpriseApplications:(window:Electron.BrowserWindow,renderer:Electron.WebContents,base:()=>Electron.Rectangle,origin:string)=>this.enterpriseApplications!.attach(window,renderer,base,origin)} : {}),
         buildApplicationMenuItems: () => this.buildApplicationMenuItems(),
         isQuitting: () => this.quitting,
         buildTrayTemplate: () => this.buildTrayTemplate(spec),
@@ -254,17 +261,6 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         logError: message => { this.logError(message) },
         mainWindowState: this.mainWindowState,
         chromeActions: {
-          ...(remoteOffer ? { remoteControl: {
-            read: () => remoteOffer.read(),
-            open: async () => {
-              try { await remoteOffer.open(this.locale) }
-              catch (cause) {
-                this.logError(`Remote control activation failed: ${String(cause)}`)
-                const copy = remoteControlOfferCopy[this.locale]
-                await this.showDesktopMessageBox({ type: 'error', title: copy.failed, message: copy.failed, detail: copy.retry })
-              }
-            },
-          } } : {}),
           locale: () => this.locale,
           version: PRODUCT_VERSION,
           openTerminal: () => { this.openTerminal() },
@@ -518,6 +514,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   private async confirmAndRestart(target: 'normal' | 'recovery' | 'safe-mode'): Promise<void> {
+    if (target === 'normal' && this.taskTransitionsProtected) { await this.restart(); return }
     const copy = desktopRestartConfirmationCopy(this.currentLocale, target)
     const options: Electron.MessageBoxOptions = {
       type: 'question',
@@ -603,19 +600,16 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   private showNotification(notification: DesktopNotification): void {
     if (!Notification.isSupported()) return
-    const nativeNotification = new Notification({
-      title: notification.title,
-      body: notification.body,
-    })
+    const nativeNotification = new Notification(desktopNotificationOptions(notification))
     nativeNotification.once('click', () => { this.show() })
     nativeNotification.show()
   }
 
   private async showUpdateMessageBox(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
-    return await this.showDesktopMessageBox(options)
+    return await this.showDesktopMessageBox({ ...options, presentation: 'product-info' })
   }
 
-  private async showDesktopMessageBox(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+  private async showDesktopMessageBox(options: DesktopMessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
     return this.generation === undefined
       ? await showDesktopMessageBox(options)
       : await this.generation.showMessageBox(options)
@@ -637,9 +631,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       type: 'info',
       title: copy.updateAvailableTitle,
       message: copy.updateAvailableMessage(version),
-      detail: channel === DESKTOP_RELEASE_CHANNEL
-        ? copy.downloadUpdate
-        : copy.installStableAlongsideBeta,
+      detail: [copy.installedVersion(PRODUCT_VERSION), copy.updateSource,
+        this.enterpriseUpdates?.release(channel,version)?.notes,
+        channel === DESKTOP_RELEASE_CHANNEL ? copy.downloadUpdate : copy.installStableAlongsideBeta].filter(Boolean).join('\n\n'),
       buttons: [copy.download, copy.later],
       defaultId: 1,
       cancelId: 1,
@@ -668,8 +662,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       await this.showUpdateMessageBox({
         type: 'info',
         title: copy.upToDateTitle,
-        message: copy.upToDateMessage,
-        detail: copy.installedVersion(result.currentVersion),
+        message: this.enterpriseUpdates?.release(DESKTOP_RELEASE_CHANNEL) === null ? copy.noEnterpriseRelease : copy.upToDateMessage,
+        detail: [copy.installedVersion(result.currentVersion), copy.updateSource].join('\n\n'),
         buttons: [copy.ok],
         defaultId: 0,
         noLink: true,
@@ -681,7 +675,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       type: 'info',
       title: copy.updateAvailableTitle,
       message: copy.updateAvailableMessage(result.latestVersion),
-      detail: copy.installerUnavailable,
+      detail: [copy.installedVersion(result.currentVersion), copy.updateSource, this.enterpriseUpdates?.release(DESKTOP_RELEASE_CHANNEL,result.latestVersion)?.notes, copy.installerUnavailable].filter(Boolean).join('\n\n'),
       buttons: [copy.ok],
       defaultId: 0,
       noLink: true,
@@ -695,6 +689,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     channel: DesktopReleaseChannel = 'stable',
   ): Promise<void> {
     const copy = desktopNativeCopy(this.currentLocale)
+    const release = this.enterpriseUpdates?.release(channel,version)
+    if (!release?.sha256 || !release.size) throw new Error('请重新检查企业版本后再下载安装包')
     const platform = this.platformStrategy.updateDownloadPlatform
     if (platform === undefined) {
       throw new Error(`dsh-plugin-desktop: updates are unavailable on ${this.platform}`)
@@ -707,7 +703,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       version,
       ...(channel === 'stable' ? {} : { channel }),
       destinationPath,
-      request: (url, init) => net.fetch(url, init),
+      request: (url, init) => this.updates.request(url, init),
+      expectedSha256: release.sha256,
+      expectedSize: release.size,
       signal,
     })
     signal.throwIfAborted()
@@ -749,6 +747,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const spec = this.scheduled
     if (spec === undefined) throw new Error('dsh-plugin-desktop: no active shell can exit for update installation')
     signal.throwIfAborted()
+    if (this.protectUpdateInstall !== undefined) {
+      await this.protectUpdateInstall(() => this.launchWindowsUpdateInstaller(artifactPath))
+      return
+    }
     await this.launchWindowsUpdateInstaller(artifactPath)
     this.quitting = true
     spec.requestQuit(0)

@@ -130,9 +130,10 @@ export function installShutdownRequests(
   signals: DesktopSignalSource,
   nativeApp: DesktopQuitSource,
   requestQuit: (code: number) => void,
+  requestSignalQuit: (code: number) => void = requestQuit,
 ): () => void {
-  const interrupt = (): void => { requestQuit(130) }
-  const terminate = (): void => { requestQuit(0) }
+  const interrupt = (): void => { requestSignalQuit(130) }
+  const terminate = (): void => { requestSignalQuit(0) }
   const beforeQuit = (event: DesktopQuitEvent): void => {
     event.preventDefault()
     requestQuit(0)

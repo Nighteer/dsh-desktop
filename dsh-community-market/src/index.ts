@@ -15,6 +15,7 @@ import {
 } from './install/service.js'
 
 export const name = 'community-market'
+export { MarketConfig as Config } from './host/routes.js'
 export const inject = ['webServer', 'settings']
 
 interface DesktopProfilesCapability {

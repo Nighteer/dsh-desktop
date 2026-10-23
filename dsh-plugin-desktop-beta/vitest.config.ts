@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  // Admin/login components imported by Desktop must share the test renderer's React instance.
+  resolve: { dedupe: ['react', 'react-dom'] },
   test: {
     environment: 'node',
     include: ['tests/**/*.spec.ts'],

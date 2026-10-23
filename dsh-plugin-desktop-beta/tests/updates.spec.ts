@@ -58,6 +58,7 @@ async function createHarness(options: {
   readonly currentVersion?: string
   readonly confirmDownload?: (version: string, channel?: 'stable' | 'beta') => Promise<boolean>
   readonly showManualCheckResult?: (result: UpdateCheckResult | null) => Promise<void>
+  readonly showDownloadFailure?: () => Promise<void>
   readonly downloadAndOpen?: (version: string, signal: AbortSignal, channel?: 'stable' | 'beta') => Promise<void>
   readonly notify?: (notification: DesktopNotification) => void
   readonly locale?: DesktopRuntime['locale']
@@ -94,6 +95,7 @@ async function createHarness(options: {
       request: options.request ?? (async () => versionResponse('2.0.0')),
       confirmDownload,
       showManualCheckResult,
+      showDownloadFailure: options.showDownloadFailure,
       downloadAndOpen,
       notify: options.notify ?? ((notification: DesktopNotification) => { notifications.push(notification) }),
     },
@@ -145,6 +147,14 @@ afterEach(() => {
 })
 
 describe('desktop update Host plugin', () => {
+  it('reports a confirmed download failure without terminating the running workspace',async()=>{
+    const failure=vi.fn(async()=>{})
+    const harness=await createHarness({packaged:false,request:async()=>versionResponse('2.1.0'),confirmDownload:async()=>true,
+      downloadAndOpen:async()=>{throw new Error('checksum mismatch')},showDownloadFailure:failure})
+    await harness.tray.invoke()
+    expect(failure).toHaveBeenCalledOnce()
+    expect(harness.registrationDispose).not.toHaveBeenCalled()
+  })
   it('checks Beta automatically and installs an older stable release only through the explicit action', async () => {
     const request = vi.fn(async (_url: string, init: RequestInit) => {
       const channel = new Headers(init.headers).get(DESKTOP_RELEASE_CHANNEL_HEADER)
@@ -291,13 +301,13 @@ describe('desktop update Host plugin', () => {
     await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs)
     await vi.waitFor(() => {
       expect(harness.notifications).toEqual([{
-        title: 'DSH Desktop Update Available',
-        body: 'Version 2.1.0 is ready to download. Open DSH Desktop to continue.',
+        title: 'LETS Desktop Update Available',
+        body: 'Enterprise version 2.1.0 is ready to download. Open LETS Desktop to continue.',
       }])
     })
     expect(harness.confirmDownload).not.toHaveBeenCalled()
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('LETS Desktop 2.1.0 Available')
     await vi.waitFor(async () => {
       expect(JSON.parse(await readFile(harness.statePath, 'utf8'))).toEqual({
         version: 3,
@@ -332,14 +342,14 @@ describe('desktop update Host plugin', () => {
     expect(version).toBe('2.1.0')
     expect(signal).toBeInstanceOf(AbortSignal)
     expect(signal.aborted).toBe(false)
-    expect(harness.tray.label()).toBe('Downloading DSH Desktop 2.1.0…')
+    expect(harness.tray.label()).toBe('Downloading LETS Desktop 2.1.0…')
     expect(harness.notifications).toEqual([])
 
     resolveDownload()
     await pending
-    await vi.waitFor(() => { expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available') })
+    await vi.waitFor(() => { expect(harness.tray.label()).toBe('LETS Desktop 2.1.0 Available') })
     expect(harness.notifications).toEqual([])
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('LETS Desktop 2.1.0 Available')
   })
 
   it('treats a manual available-version selection as a fresh confirmation', async () => {
@@ -355,7 +365,7 @@ describe('desktop update Host plugin', () => {
     await harness.tray.invoke()
     expect(confirmDownload).toHaveBeenCalledOnce()
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('LETS Desktop 2.1.0 Available')
 
     await harness.tray.invoke()
     expect(confirmDownload).toHaveBeenCalledTimes(2)
@@ -379,7 +389,7 @@ describe('desktop update Host plugin', () => {
     expect(harness.confirmDownload).toHaveBeenCalledWith('2.1.0')
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
     expect(harness.showManualCheckResult).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.2.0 Available')
+    expect(harness.tray.label()).toBe('LETS Desktop 2.2.0 Available')
   })
 
   it.each([
@@ -468,7 +478,7 @@ describe('desktop update Host plugin', () => {
 
     expect(harness.notifications).toEqual([])
     expect(harness.confirmDownload).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('LETS Desktop 2.1.0 Available')
   })
 
   it('does not prompt on a platform without a fixed download entry', async () => {
@@ -511,7 +521,7 @@ describe('desktop update Host plugin', () => {
     expect(harness.downloadAndOpen).toHaveBeenCalledOnce()
     expect(harness.notifications).toEqual([])
     expect(harness.warnings).toEqual([])
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('LETS Desktop 2.1.0 Available')
   })
 
   it('aborts checks and downloads and removes the tray item on effect disposal', async () => {

@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   DESKTOP_DOWNLOAD_URLS,
@@ -77,6 +78,14 @@ afterEach(async () => {
 })
 
 describe('desktop update installer download', () => {
+  it('accepts the published digest and rejects corruption and truncated content',async()=>{
+    const directory=await temporaryDirectory(),artifact=windowsArtifact()
+    const digest=createHash('sha256').update(artifact).digest('hex')
+    const options={platform:'win32' as const,version:'1.0.1',expectedSize:artifact.length,expectedSha256:digest,request:async()=>chunkedResponse([artifact])}
+    await expect(downloadDesktopUpdate({...options,destinationPath:join(directory,'valid.exe')})).resolves.toContain('valid.exe')
+    await expect(downloadDesktopUpdate({...options,destinationPath:join(directory,'bad-hash.exe'),expectedSha256:'0'.repeat(64)})).rejects.toMatchObject({code:'invalid-artifact'})
+    await expect(downloadDesktopUpdate({...options,destinationPath:join(directory,'truncated.exe'),expectedSize:artifact.length+1})).rejects.toMatchObject({code:'invalid-artifact'})
+  })
   it('streams a macOS DMG from only the fixed endpoint and atomically completes it', async () => {
     const directory = await temporaryDirectory()
     const artifact = dmgArtifact()
@@ -93,11 +102,11 @@ describe('desktop update installer download', () => {
       request,
     })
 
-    expect(result).toBe(join(directory, 'DSH-Desktop-2.1.0-mac.dmg'))
+    expect(result).toBe(join(directory, 'LETS-Desktop-2.1.0-mac.dmg'))
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe(DESKTOP_DOWNLOAD_URLS.darwin)
-    expect(calls[0]?.init).toMatchObject({ method: 'GET', cache: 'no-store', redirect: 'follow' })
+    expect(calls[0]?.init).toMatchObject({ method: 'GET', cache: 'no-store', redirect: 'error' })
     await expectNoPartialFiles(directory)
   })
 
@@ -114,7 +123,7 @@ describe('desktop update installer download', () => {
       },
     })
 
-    expect(result).toBe(join(directory, 'DSH-Desktop-2.2.0-windows.exe'))
+    expect(result).toBe(join(directory, 'LETS-Desktop-2.2.0-windows.exe'))
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
     await expectNoPartialFiles(directory)
   })
@@ -130,7 +139,7 @@ describe('desktop update installer download', () => {
 
     expect(result).toBe(join(
       directory,
-      'DSH-Desktop-2.8.0+build-mac.dmg',
+      'LETS-Desktop-2.8.0+build-mac.dmg',
     ))
   })
 

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsScope } from '../src/catalog/settings-scope.js'
 import { describe, expect, it, vi } from 'vitest'
 import {
   SettingsCatalogSourceStore,

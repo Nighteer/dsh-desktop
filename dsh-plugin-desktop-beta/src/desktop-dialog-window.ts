@@ -42,7 +42,7 @@ export interface DesktopDialogOptions {
   readonly defaultId?: number
   readonly cancelId?: number
   /** Use a larger shadcn scroll surface for bounded technical diagnostics. */
-  readonly presentation?: 'default' | 'diagnostic' | 'profile-compatibility'
+  readonly presentation?: 'default' | 'diagnostic' | 'profile-compatibility' | 'product-info'
   /** Override whether this dialog exposes native close/caption controls. */
   readonly windowControls?: boolean
 }
@@ -218,8 +218,10 @@ export async function showDesktopDialog(
 }
 
 /** Electron MessageBox-compatible adapter backed by the Desktop dialog window. */
+export type DesktopMessageBoxOptions = MessageBoxOptions & Pick<DesktopDialogOptions, 'presentation'>
+
 export async function showDesktopMessageBox(
-  options: MessageBoxOptions,
+  options: DesktopMessageBoxOptions,
   parent?: BrowserWindow,
 ): Promise<MessageBoxReturnValue> {
   const result = await showDesktopDialog({
@@ -230,6 +232,7 @@ export async function showDesktopMessageBox(
     buttons: options.buttons ?? ['OK'],
     ...(options.defaultId === undefined ? {} : { defaultId: options.defaultId }),
     ...(options.cancelId === undefined ? {} : { cancelId: options.cancelId }),
+    ...(options.presentation === undefined ? {} : { presentation: options.presentation }),
   }, parent)
   return Object.freeze({ response: result.response, checkboxChecked: false })
 }

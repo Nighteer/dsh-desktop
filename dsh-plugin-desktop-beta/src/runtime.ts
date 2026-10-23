@@ -118,6 +118,8 @@ export interface DesktopUpdateAdapter {
   confirmDownload(version: string, channel?: DesktopReleaseChannel): Promise<boolean>
   /** Present the outcome of a user-triggered version check. */
   showManualCheckResult(result: UpdateCheckResult | null): Promise<void>
+  /** Report an actionable failure without interrupting active tasks. */
+  showDownloadFailure?(): Promise<void>
   /** Download and hand one confirmed update to the platform installer. */
   downloadAndOpen(version: string, signal: AbortSignal, channel?: DesktopReleaseChannel): Promise<void>
   /** Present a native status notification without blocking the Host tree. */
@@ -198,7 +200,7 @@ export interface DesktopRuntime {
   /** Reveal and focus the current window, if mounted. */
   show(): void
 
-  /** Request native attention for background activity while the window is unfocused. */
+  /** Show a native status notification; only background windows also request taskbar/Dock attention. */
   notifyAttention(notification: DesktopNotification): void
 
   /**

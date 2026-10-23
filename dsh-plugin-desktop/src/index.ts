@@ -2,7 +2,8 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+import { desktopConfigScope, readConfigForm, watchConfigForms } from './config-forms.ts'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import {
@@ -56,6 +57,9 @@ import {
   handleDesktopTerminalOpenRequest,
 } from './desktop-settings-route.ts'
 import type {} from './desktop-settings-controller.ts'
+import { DESKTOP_PLUGIN_MANAGER_PATH } from './desktop-plugin-manager-contract.ts'
+import { handleDesktopPluginManagerRequest } from './desktop-plugin-manager-route.ts'
+import type {} from './desktop-plugin-manager.ts'
 import { DESKTOP_LAN_HTTPS_CA_PATH } from './lan-https-runtime.ts'
 import { desktopBootRecoveryInjections } from './desktop-boot-recovery.ts'
 import type { DesktopLocale, DesktopShellMode } from './runtime.ts'
@@ -85,10 +89,10 @@ export const name = 'desktop-shell'
 
 /** Services required before the shell can register its renderer generation. */
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
-export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection']
+export const inject = ['webServer', 'webApp', 'appExit', 'settings', 'connection']
 
 /** Standard settings namespace shared by tray and configuration surfaces. */
-export const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
+export const DESKTOP_SETTINGS_NAMESPACE = 'desktop-shell'
 
 const UI_THEME_SETTINGS_NAMESPACE = THEME_SETTINGS_NAMESPACE
 const UI_LOCALE_SETTINGS_NAMESPACE = LOCALE_SETTINGS_NAMESPACE
@@ -131,7 +135,7 @@ export interface DesktopSettings {
 
 /** Schema registered with the standard settings service. */
 export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
-  mode: z.union(['compatibility', 'extended', 'advanced'] as const).default('compatibility'),
+  mode: z.union(['compatibility', 'extended', 'advanced'] as const).default(process.platform==='win32'?'advanced':'compatibility'),
   macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL),
   windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL),
   port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT),
@@ -139,6 +143,16 @@ export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
   networkExposure: z.union(['loopback', 'lan'] as const).default('loopback'),
   logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info'),
 })
+
+/** Reject runtime-incompatible settings before a profile write commits. */
+export function validateDesktopSettings(value: DesktopSettings, platform: NodeJS.Platform): void {
+  if (!desktopBrowserAccessAvailable(value.mode) && value.openBrowser) {
+    throw new Error('dsh-plugin-desktop: browser access requires compatibility mode')
+  }
+  if (value.mode !== 'compatibility' && platform === 'linux') {
+    throw new Error('dsh-plugin-desktop: custom desktop shell modes are supported on macOS and Windows')
+  }
+}
 
 /** Native window configuration. */
 export interface Config {
@@ -163,12 +177,14 @@ export interface Config {
 }
 
 /** Validated native window configuration. */
-export const Config: z<Config> = z.object({
-  mode: z.union(['compatibility', 'extended', 'advanced'] as const).default('compatibility'),
-  macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL),
-  windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL),
-  port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT),
-  networkExposure: z.union(['loopback', 'lan'] as const).default('loopback'),
+export const Config = z.object({
+  mode: z.union(['compatibility', 'extended', 'advanced'] as const).default(process.platform==='win32'?'advanced':'compatibility').volatile(),
+  macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL).volatile(),
+  windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL).volatile(),
+  port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT).volatile(),
+  networkExposure: z.union(['loopback', 'lan'] as const).default('loopback').volatile(),
+  openBrowser: z.boolean().default(false).volatile(),
+  logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info').volatile(),
   width: z.number().step(1).min(800).default(1280),
   height: z.number().step(1).min(600).default(840),
   minWidth: z.number().step(1).min(640).default(900),
@@ -211,7 +227,13 @@ export function desktopRendererUrl(
  * @param ctx - Host context carrying the Electron adapter and Web carrier.
  * @param config - validated native window values.
  */
-export function apply(ctx: Context, config: Config): void {
+export function apply(ctx: Context, input: { [K in keyof DesktopSettings]: Volatile<DesktopSettings[K]> } & Pick<Config, 'width' | 'height' | 'minWidth' | 'minHeight'>): void {
+  // Native window changes are restart-applied even though the form itself is live.
+  const config: Config & DesktopSettings = {
+    width:input.width,height:input.height,minWidth:input.minWidth,minHeight:input.minHeight,
+    mode:input.mode.get(),macosMaterial:input.macosMaterial.get(),windowsMaterial:input.windowsMaterial.get(),
+    port:input.port.get(),openBrowser:input.openBrowser.get(),networkExposure:input.networkExposure.get(),logLevel:input.logLevel.get(),
+  }
   const runtime = ctx.get('desktopRuntime')
   if (runtime === undefined) {
     process.stderr.write(
@@ -236,6 +258,7 @@ export function apply(ctx: Context, config: Config): void {
   if (ctx.webServer.host !== desktopWebServerHost(config.networkExposure)) {
     throw new Error('dsh-plugin-desktop: desktop shell WebServer host does not match networkExposure')
   }
+  if (ctx.webServer.port === undefined) throw new Error('Desktop WebServer has no listening port')
   lanHttps.attach(ctx.webServer.port)
   const iconFilename = runtime.platform === 'darwin'
     ? 'app-icon-mac.png'
@@ -245,21 +268,7 @@ export function apply(ctx: Context, config: Config): void {
     templatePath: fileURLToPath(new URL('../build/tray-iconTemplate.png', import.meta.url)),
     bluePath: fileURLToPath(new URL('../build/tray-icon-blue.png', import.meta.url)),
   }
-  const settings = ctx.settings.register(
-    DESKTOP_SETTINGS_NAMESPACE,
-    DesktopSettingsSchema,
-    {
-      applies: 'restart',
-      validate: (value) => {
-        if (!desktopBrowserAccessAvailable(value.mode) && value.openBrowser) {
-          throw new Error('dsh-plugin-desktop: browser access requires compatibility mode')
-        }
-        if (value.mode !== 'compatibility' && runtime.platform === 'linux') {
-          throw new Error('dsh-plugin-desktop: custom desktop shell modes are supported on macOS and Windows')
-        }
-      },
-    },
-  )
+  const settings = desktopConfigScope(ctx, DESKTOP_SETTINGS_NAMESPACE, config, value => validateDesktopSettings(value, runtime.platform))
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   ctx.effect(
     () => ctx.webServer.register({
@@ -294,6 +303,14 @@ export function apply(ctx: Context, config: Config): void {
   ctx.on('webserver/index-inject', table => {
     table.push(...desktopBootRecoveryInjections())
   })
+  const pluginManager = ctx.get('desktopPluginManager')
+  if (pluginManager !== undefined) ctx.effect(() => ctx.webServer.register({
+    kind: 'exact', path: DESKTOP_PLUGIN_MANAGER_PATH,
+    handler: (req, res) => {
+      if (rejectDesktopRequest(ctx, req, res)) return
+      return handleDesktopPluginManagerRequest(req, res, rendererOrigin, pluginManager)
+    },
+  }), 'desktop: private plugin manager route')
   const desktopSettings = ctx.get('desktopSettingsController')
   if (desktopSettings !== undefined) {
     const reportSettingsError = (operation: string, cause: unknown): void => {
@@ -445,12 +462,12 @@ export function apply(ctx: Context, config: Config): void {
     }
   }, 'dsh-plugin-desktop: live browser access and restart-applied native settings')
   if (runtime.platform !== 'linux') {
-    ctx.on('settings/updated', (namespace, next) => {
+    watchConfigForms(ctx, (namespace, next) => {
       if (namespace !== UI_THEME_SETTINGS_NAMESPACE) return
       runtime.setThemeSource((next as ThemeSettings).preference)
     })
   }
-  ctx.on('settings/updated', (namespace, next) => {
+  watchConfigForms(ctx, (namespace, next) => {
     if (namespace !== UI_LOCALE_SETTINGS_NAMESPACE) return
     runtime.setLocalePreference(desktopLocalePreference((next as LocaleSettings).preference))
   })
@@ -464,7 +481,7 @@ export function apply(ctx: Context, config: Config): void {
         runtime.windowsBuild,
       )
       const url = desktopRendererUrl(
-        ctx.webServer.port,
+        ctx.webServer.port!,
         config.mode,
         runtime.platform,
         runtime.updates.currentVersion,
@@ -484,26 +501,16 @@ export function apply(ctx: Context, config: Config): void {
         trayIcons,
         readLocalePreference: () => {
           return desktopLocalePreference(
-            (ctx.settings.get(UI_LOCALE_SETTINGS_NAMESPACE) as LocaleSettings | undefined)?.preference,
+            readConfigForm<LocaleSettings>(ctx, UI_LOCALE_SETTINGS_NAMESPACE)?.preference,
           )
         },
         readThemeSource: () => {
-          const theme = ctx.settings.get(UI_THEME_SETTINGS_NAMESPACE) as ThemeSettings | undefined
+          const theme = readConfigForm<ThemeSettings>(ctx, UI_THEME_SETTINGS_NAMESPACE)
           if (theme === undefined) {
             throw new Error('dsh-plugin-desktop: custom shell requires the ui-theme settings namespace')
           }
           return theme.preference
         },
-        ...(desktopSettings === undefined ? {} : {
-          readRemoteControl: async () => {
-            const aa = desktopSettings.read().aa
-            return aa?.requested === true || aa?.effective === true
-          },
-          enableRemoteControl: async () => {
-            const result = await desktopSettings.selectAa(true)
-            result.afterResponse?.()
-          },
-        }),
         requestQuit: appExit,
         requestModeChange: async mode => {
           const current = settings.get()

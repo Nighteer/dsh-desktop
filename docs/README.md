@@ -1,4 +1,4 @@
-# DSH Desktop 文档
+# LETSDSH Desktop 文档
 
 [English documentation](README.en.md)
 
@@ -19,6 +19,18 @@
 
 ### 开发者与维护者文档
 
+[桌面体验与 PPT 模式](desktop-refinements.md)：简洁顶栏、默认增强模式、单步选择工作区及会话级 PPT 模板与导出。
+
+[企业开发与验收](enterprise-development.md)：企业账号、管理后台、桌面登录、隔离、测试、备份与内网部署。
+
+[企业模型管理与统一调用](enterprise-models.md)：模型供应商配置、密钥加密、员工/部门授权、桌面流式调用及撤权中止。
+
+[企业应用登记与授权](enterprise-applications.md)：管理员配置网页地址、员工/部门入口授权、桌面打开流程及目标系统权限边界。
+
+[企业技能与 MCP](enterprise-resources.md)：版本发布、员工/部门授权、桌面安装、个人导入、连接状态与真实工具调用。
+
+[企业知识库与 WeKnora](enterprise-knowledge.md)：连接配置、test 库试点、员工／部门授权、桌面对话检索与来源、安全及验收边界。
+
 | 文档 | 你会得到什么 |
 | --- | --- |
 | [插件生态倡议书](plugin-ecosystem.md) | 开放、可组合、可持续的插件生态愿景与三条原则 |
@@ -27,7 +39,7 @@
 | [Fabric 社区意见处置记录](../dsh-community-fabric/docs/research/community-issue-23-review.zh.md) | Issue #23 中哪些建议已采纳、拆成独立 RFC、延期或不进入可移植核心 |
 | [Fabric 框架与插件需求调研](../dsh-community-fabric/docs/research/mature-plugin-frameworks.zh.md) | Koishi、Chrome、VS Code 的成熟模式，以及真实 DSH 插件的功能需求 |
 | [VS Code 扩展模型调研](../dsh-community-fabric/docs/research/vscode-extension-model.zh.md) | VS Code 已实现的声明、Provider、UI、运行位置和生命周期模式，以及它们对 Fabric RFC 的具体约束 |
-| [Community Market 设计](../dsh-community-market/README.zh.md) | 规划中的插件市场壳、可扩展目录来源、用户选择、安装确认和安全边界 |
+| [Community Market 设计](../dsh-community-market/README.zh.md) | 已内置的插件市场、可扩展目录来源、安装与卸载确认和安全边界 |
 | [Market 目录提供方合同](../dsh-community-market/docs/catalog-provider-contract.zh.md) | 面向后续实现团队的 Schema、query 参数、多来源和适配器规范 |
 | [架构说明](architecture.md) | Electron、Host、Web carrier、profile 和打包之间的关系 |
 | [Desktop service 参考](../dsh-plugin-desktop/docs/plugin-services.md) | `desktopProfiles`、`desktopPnpm` 的稳定 contract 和 TypeScript 示例 |

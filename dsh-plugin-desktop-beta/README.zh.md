@@ -8,9 +8,9 @@
 
 ## 架构
 
-Electron 可执行文件只包含最小启动代码。它获取单实例锁、解析当前选中的 DSH profile、提供原生运行时能力，并在 Electron main 进程中启动 Host Cordis 根。`desktop-shell` Host 插件通过 Cordis effect 拥有 `BrowserWindow`、导航策略、settings namespace，以及关闭与退出生命周期。原生 runtime 拥有实体托盘；`desktop-shell`、`desktop-profiles`、`desktop-terminal` 与 `desktop-updates` 则通过有序 item registry 提供 effect-scoped 命令。
+Electron 可执行文件是原生启动器。它获取单实例锁、解析当前选中的 DSH profile、拥有原生生命周期资源，并默认在独立的 Electron utility process 中启动 Host Cordis 根。隔离 Host 通过有界 RPC 请求原生能力，不直接拥有 Electron 对象。`desktop-shell` Host 插件通过 Cordis effect 安排 `BrowserWindow`、导航策略、settings namespace，以及关闭与退出生命周期。原生 runtime 拥有实体托盘；`desktop-shell`、`desktop-profiles`、`desktop-terminal` 与 `desktop-updates` 则通过有序 item registry 提供 effect-scoped 命令。
 
-三种呈现模式都复用现有 Web carrier。profile 挂载普通 `dsh-base` 与 `dsh-web-app` bundle。Host 默认把 HTTP 与 WebSocket surface 绑定到 `127.0.0.1` 的临时端口；只有明确确认的局域网设置才会绑定所有接口，Electron 则始终从 loopback 地址在沙箱 renderer 中加载同源页面。Electron 不维护自有插件 roster，不使用 preload bridge，renderer 也不会获得原始 Electron API。
+三种呈现模式都复用现有 Web carrier。profile 挂载普通 `dsh-base` 与 `dsh-web-app` bundle。Host 默认把 HTTP 与 WebSocket surface 绑定到 `127.0.0.1` 的临时端口；只有明确确认的局域网设置才会绑定所有接口，Electron 则始终从 loopback 地址在沙箱 renderer 中加载同源页面。Electron 不维护自有插件 roster，renderer 也不会获得原始 Electron API；最小化的 context-isolated preload 只暴露明确声明的 Desktop 操作与文件路径桥。
 
 desktop package 拥有普通 Host 与 Web Client 两个 face。它的 Client face 会在所有模式下校验 Host 提供的模式、平台和经过能力门槛解析的材质 marker。兼容模式把保持不变的官方呈现放在独立 Desktop frame 下方。扩展窗口会用自己独立注册的 Desktop layout 与 sidebar surface 替换官方 root layout，同时继续承载官方 sidebar、conversation 和 details occupant。增强模式保留独立的 root registration，以及最初增强模式确定的紧凑内部 caption 几何。所有模式下，第三方 Web client 都继续使用普通 DSH 模块图。
 
@@ -109,6 +109,13 @@ yarn dev
 ```
 
 `dev` 会在启动前自动构建，不需要另行手动构建。
+
+如需隔离开发运行，请在启动 Electron 前把 `DSH_DESKTOP_USER_DATA_DIR` 设为一个绝对目录。日志、缓存、崩溃证据、设置和跨发行渠道的开发状态都会限制在该覆盖目录中，因此本次运行不会读写已安装应用的默认用户数据目录。目录不存在时由 Electron 创建；已存在的目标必须是普通目录。空值、相对路径、文件系统根目录、文件、符号链接和其他特殊目标都会被拒绝。未设置该变量时，继续使用原有的 `DSH Desktop Beta` 默认位置。
+
+```powershell
+$env:DSH_DESKTOP_USER_DATA_DIR = (Join-Path $PWD '.runtime-appdata\desktop-beta')
+corepack yarn dev
+```
 
 以下 headless-safe 启动器入口不会导入或启动 Electron：
 

@@ -1,6 +1,7 @@
 /** BrowserWindow construction for compatibility and advanced shells. */
 
 import type { BrowserWindowConstructorOptions, NativeImage } from 'electron'
+import { NATIVE_ORIGIN_ARGUMENT } from './native-capabilities-contract.ts'
 import type { DesktopPlatform, DesktopShellSpec } from './runtime.ts'
 import {
   ADVANCED_MACOS_TRAFFIC_LIGHT_TOP,
@@ -11,7 +12,13 @@ import {
 import { windowsSupportsSystemBackdrop } from './window-material.ts'
 
 /** Stable persistent storage isolated from every auxiliary/default session. */
-export const DESKTOP_RENDERER_SESSION_PARTITION = 'persist:dsh-desktop-renderer'
+export let DESKTOP_RENDERER_SESSION_PARTITION = 'persist:dsh-desktop-renderer'
+
+/** Set once after enterprise authentication, before constructing any business renderer. */
+export function setDesktopEnterprisePartition(partition: string): void {
+  if (!/^persist:dsh-e-[a-f0-9]{32}$/u.test(partition)) throw new Error('Invalid enterprise session partition')
+  DESKTOP_RENDERER_SESSION_PARTITION = partition
+}
 
 function baseWindowOptions(
   spec: DesktopShellSpec,
@@ -35,6 +42,8 @@ function baseWindowOptions(
       sandbox: true,
       webSecurity: true,
       partition: DESKTOP_RENDERER_SESSION_PARTITION,
+      webviewTag: true,
+      additionalArguments: [NATIVE_ORIGIN_ARGUMENT + new URL(spec.url).origin],
     },
   }
 }

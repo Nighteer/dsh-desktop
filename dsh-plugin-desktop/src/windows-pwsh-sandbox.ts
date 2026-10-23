@@ -3,9 +3,10 @@
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { win32 } from 'node:path'
-import type { ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
+import type { ShellExecSpec, ShellExecution } from '@deepseek-ai/dsh-shell'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
+import { createVolatile } from '@deepseek-ai/cosmokit'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const UPSTREAM_RUNNER = fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner'))
@@ -56,9 +57,9 @@ export function desktopWindowsPwshConfig(
   platform: NodeJS.Platform,
   exists: (path: string) => boolean = existsSync,
 ): PwshConfig {
-  if (config.pwshPath !== undefined && config.pwshPath.length > 0) return config
+  if (config.pwshPath.get()) return config
   const pwshPath = desktopWindowsPwshPath(env, platform, exists)
-  return pwshPath === undefined ? config : { ...config, pwshPath }
+  return pwshPath === undefined ? config : { ...config, pwshPath: createVolatile(pwshPath) }
 }
 
 /**
@@ -108,15 +109,34 @@ export class DesktopWindowsPwshSandbox extends SandboxPwshExecutor {
     })
   }
 
-  protected override async runArgv(spec: ShellExecSpec, argv: readonly string[]): Promise<ShellRunResult> {
-    const adapted = this.adapt(spec, argv)
-    return super.runArgv(adapted.spec, adapted.argv)
+  /**
+   * Adapt the exact argv the upstream sandbox produced, keeping confinement
+   * preparation inside the caller's deadline. Preparation only yields argv after
+   * this executor has handed a spec to the local executor, so the runner-only
+   * Electron environment lands on this class's own spec copy at the moment the
+   * argv becomes known - strictly before the local executor reads the spec to
+   * build its spawn request.
+   * @param spec - resolved PowerShell execution spec.
+   * @param argvOrPrepare - exact argv, or preparation sharing the execution deadline.
+   * @returns the foreground result and whether argv reached the subprocess provider.
+   */
+  protected override executeArgv(
+    spec: ShellExecSpec,
+    argvOrPrepare: readonly string[] | ((signal: AbortSignal) => Promise<readonly string[]>),
+    onStarted?: (process: ShellExecution) => void,
+  ): ReturnType<SandboxPwshExecutor['execute']> {
+    if (typeof argvOrPrepare !== 'function') {
+      const adapted = this.adapt(spec, argvOrPrepare)
+      return super.executeArgv(adapted.spec, adapted.argv, onStarted)
+    }
+    const pending: ShellExecSpec = { ...spec }
+    return super.executeArgv(pending, async signal => {
+      const adapted = this.adapt(spec, await argvOrPrepare(signal))
+      pending.env = adapted.spec.env
+      return adapted.argv
+    }, onStarted)
   }
 
-  protected override startArgv(spec: ShellExecSpec, argv: readonly string[]): ShellProcess {
-    const adapted = this.adapt(spec, argv)
-    return super.startArgv(adapted.spec, adapted.argv)
-  }
 }
 
 export default DesktopWindowsPwshSandbox

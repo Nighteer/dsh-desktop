@@ -1,7 +1,16 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
 import { startIsolatedDesktopHost } from './host-process.ts'
-import { app, crashReporter, safeStorage, shell } from 'electron'
+import { app, crashReporter, safeStorage, shell, net } from 'electron'
+import { DesktopEnterpriseLogin, enterpriseConfiguration } from './enterprise-login.ts'
+import { EnterpriseDesktopUpdates } from './enterprise-desktop-updates.ts'
+import { startEnterpriseModelBridge } from './enterprise-model-bridge.ts'
+import { installEnterpriseModels, prepareEnterpriseModels } from './enterprise-models.ts'
+import { installEnterpriseResources } from './enterprise-resources.ts'
+import {installEnterpriseKnowledge} from './enterprise-knowledge.ts'
+import {installOfficialOffice} from './official-office.ts'
+import { installDesktopTaskControl } from './desktop-task-control.ts'
+import { DesktopTaskGuard } from './desktop-task-guard.ts'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -31,12 +40,13 @@ import {
   installDesktopPnpmRuntime,
 } from './desktop-runtime-environment.ts'
 import { desktopProductVersion, ElectronDesktopRuntime } from './electron-runtime.ts'
+import { resolveDesktopUserDataDirectory } from './desktop-user-data-directory.ts'
+import { configureDesktopWindowBranding, consumeDesktopTaskbarLaunch, desktopTaskbarRelaunchCommand } from './desktop-window-branding.ts'
 import { getOrCreateDesktopInstallationId } from './desktop-installation-id.ts'
 import {
   ElectronStderrLogger,
   installDesktopChildProcessLogging,
   installDesktopUncaughtExceptionLogging,
-  type DesktopLogger,
 } from './desktop-logger.ts'
 import {
   beginDesktopRun,
@@ -66,6 +76,7 @@ import { LogFileSink } from './log-files.ts'
 import { maskSecrets } from './mask-secrets.ts'
 import { resolveDesktopShellEnvironment } from './shell-environment.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
+import { readConfigForm, watchConfigForms } from './config-forms.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import {
   beginDesktopProfileStartup,
@@ -80,6 +91,7 @@ import {
 import { DesktopProfileService } from './profile-service.ts'
 import { DesktopActionsService } from './desktop-actions.ts'
 import { clearDesktopProfilePluginState, DesktopPluginsService } from './desktop-plugins.ts'
+import { DesktopPluginManagerController } from './desktop-plugin-manager.ts'
 import {
   desktopMarketSnapshotWithEffective,
   readDesktopMarketStateForUserData,
@@ -118,10 +130,17 @@ import {
 import { routeDesktopStartupFailure } from './startup-failure-routing.ts'
 import { DesktopStartupGeneration } from './startup-generation.ts'
 import {
+  notifyDesktopSafeModeActive,
+  notifySessionProjectionCacheRecovery,
+  notifySkippedOptionalEntries,
+  notifyWindowsVolumeConcerns,
+  warnWindowsVolumeConcerns,
+} from './startup-notifications.ts'
+import {
   desktopInstallAnchor,
+  installDesktopProfileContext,
   healDesktopProfileModuleFallback,
   prepareDesktopProfile,
-  type SkippedOptionalEntry,
 } from './profile.ts'
 import { DesktopProfileCheckpoint } from './profile-checkpoint.ts'
 import {
@@ -165,11 +184,7 @@ import {
   installShutdownRequests,
   type DesktopShutdown,
 } from './shutdown.ts'
-import {
-  diagnoseWindowsVolumes,
-  formatWindowsVolumeConcern,
-  type WindowsVolumeConcern,
-} from './windows-volume-diagnostics.ts'
+import { diagnoseWindowsVolumes } from './windows-volume-diagnostics.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { desktopLocaleFromLanguageTag, desktopTrayLabel } from './tray-locale.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
@@ -198,19 +213,18 @@ import {
   type SessionProjectionCacheRecoveryResult,
 } from './session-projcache-recovery.ts'
 import { windowsSupportsMica } from './window-material.ts'
+import {registerDesktopNotificationBranding} from './desktop-notification-branding.ts'
 import {
   DESKTOP_APP_ID,
   DESKTOP_PACKAGE_NAME,
   DESKTOP_PRODUCT_NAME,
   DESKTOP_RELEASE_CHANNEL,
-  DESKTOP_USER_DATA_DIRECTORY_NAME,
   OTHER_DESKTOP_PRODUCT_IDENTITY,
 } from './product-identity.ts'
 import {
   desktopSharedHomeNoticeRequired,
   resolveDesktopChannelHome,
 } from './desktop-channel-home.ts'
-import { desktopRecoveryCopy } from './recovery-copy.ts'
 
 const BIN_NAME = DESKTOP_PACKAGE_NAME
 const PRODUCT_NAME = DESKTOP_PRODUCT_NAME
@@ -268,88 +282,6 @@ function lifecycleStartupFailureReason(
   return runtime.rendererBootFailureReason ?? 'startup-failed'
 }
 
-/** Report optional user UI plugins skipped to keep startup recoverable. */
-function notifySkippedOptionalEntries(
-  runtime: ElectronDesktopRuntime,
-  logger: DesktopLogger,
-  entries: readonly SkippedOptionalEntry[],
-): void {
-  if (entries.length === 0) return
-  const copy = desktopNativeCopy(runtime.locale)
-  const names = entries.map(entry => entry.name)
-  try {
-    runtime.updates.notify({
-      title: copy.skippedPluginTitle,
-      body: copy.skippedPluginBody(names[0]!, names.length - 1),
-    })
-  } catch (cause) {
-    logger.error(`${BIN_NAME}: failed to show skipped plugin notification: ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-}
-
-/** Surface path/volume risks that otherwise become obscure sandbox or pnpm failures later. */
-function warnWindowsVolumeConcerns(logger: DesktopLogger, concerns: readonly WindowsVolumeConcern[]): void {
-  for (const concern of concerns) {
-    logger.error(`${BIN_NAME}: Windows volume warning: ${formatWindowsVolumeConcern(concern)}`)
-  }
-}
-
-/** Notify once after the UI is ready; stderr carries the exact paths. */
-function notifyWindowsVolumeConcerns(
-  runtime: ElectronDesktopRuntime,
-  logger: DesktopLogger,
-  concerns: readonly WindowsVolumeConcern[],
-): void {
-  if (concerns.length === 0) return
-  const copy = desktopNativeCopy(runtime.locale)
-  const concernLabel = concerns[0]?.label
-  const label = runtime.locale === 'zh'
-    ? concernLabel === 'application install' ? '应用安装目录'
-      : concernLabel === 'desktop user data' ? '桌面用户数据'
-        : concernLabel === 'DSH home' ? 'DSH 主目录'
-          : '某个配置路径'
-    : concernLabel ?? 'A configured path'
-  try {
-    runtime.updates.notify({
-      title: copy.unsupportedStorageTitle,
-      body: copy.unsupportedStorageBody(label),
-    })
-  } catch (cause) {
-    logger.error(`${BIN_NAME}: failed to show Windows volume warning: ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-}
-
-function notifySessionProjectionCacheRecovery(
-  runtime: ElectronDesktopRuntime,
-  logger: DesktopLogger,
-  _recovery: Extract<SessionProjectionCacheRecoveryResult, { status: 'quarantined' }>,
-): void {
-  try {
-    runtime.updates.notify({
-      title: 'Recovered Session Cache',
-      body: 'An oversized session projection cache was moved aside and will be rebuilt from session history.',
-    })
-  } catch (cause) {
-    logger.error(`${BIN_NAME}: failed to show session projection cache recovery notification: ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-}
-
-/** Explain the disposable environment after the Safe Mode renderer is healthy. */
-function notifyDesktopSafeModeActive(
-  runtime: ElectronDesktopRuntime,
-  logger: DesktopLogger,
-): void {
-  const copy = desktopRecoveryCopy(runtime.locale)
-  try {
-    runtime.updates.notify({
-      title: copy.safeModeNotificationTitle,
-      body: copy.safeModeNotificationBody,
-    })
-  } catch (cause) {
-    logger.error(`${BIN_NAME}: failed to show Safe Mode notification: ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-}
-
 /** Use one Profile-owned Market request as the first composition input. */
 function desktopProfileMarketSnapshot(market: DesktopMarketProvider): DesktopMarketSnapshot {
   return Object.freeze({
@@ -386,7 +318,7 @@ async function mirrorDesktopProfilePreferences(
 }
 
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
-async function start(): Promise<void> {
+async function start(releaseUserDataRoot: string, enterprise?: DesktopEnterpriseLogin): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
     return
@@ -524,25 +456,30 @@ async function start(): Promise<void> {
     },
   )
   let restartRequested = false
+  let taskGuard: DesktopTaskGuard
   const installationId = await getOrCreateDesktopInstallationId(app.getPath('userData'))
   runtime = new ElectronDesktopRuntime(async target => {
     if (shutdown === undefined) {
       throw new Error('dsh-plugin-desktop: shutdown coordinator is not ready')
     }
     if (restartRequested) return
-    if (target === 'safe-mode') {
-      if (prepareSafeMode === undefined) throw new Error(`${BIN_NAME}: Safe Mode is unavailable`)
-      prepareSafeMode()
+    const restart = async (): Promise<void> => {
+      if (target === 'safe-mode') {
+        if (prepareSafeMode === undefined) throw new Error(`${BIN_NAME}: Safe Mode is unavailable`)
+        prepareSafeMode()
+      }
+      restartRequested = true
+      nativeExit.requestRelaunch(
+        target === 'safe-mode'
+          ? desktopSafeModeRelaunchArguments()
+          : target === 'recovery'
+            ? desktopRecoveryRelaunchArguments()
+            : desktopDefaultRelaunchArguments(),
+      )
+      await shutdown!.request(0)
     }
-    restartRequested = true
-    nativeExit.requestRelaunch(
-      target === 'safe-mode'
-        ? desktopSafeModeRelaunchArguments()
-        : target === 'recovery'
-          ? desktopRecoveryRelaunchArguments()
-          : desktopDefaultRelaunchArguments(),
-    )
-    await shutdown.request(0)
+    if (target === undefined) await taskGuard.run('restart', restart)
+    else { taskGuard.dispose(); await restart() }
   }, (report) => {
     if (report.status === 'failed') {
       lifecycleRecorder.finishRendererBoot(
@@ -554,18 +491,43 @@ async function start(): Promise<void> {
     // legacy Renderer recovery dialog from racing the native startup window.
     return report.status === 'failed'
   }, electronLogger, undefined, undefined, installationId)
+  runtime.enterpriseApplications = enterprise?.applications
+  if (enterprise) runtime.enterpriseUpdates = new EnterpriseDesktopUpdates(enterprise.client,process.platform,process.arch,runtime.updates.currentVersion,(url,init)=>net.fetch(url,init))
   const finalExit = (code: number): void => { nativeExit.finish(code) }
   shutdown = createDesktopShutdown(
     async () => { await generation.release() },
     finalExit,
   )
-  const requestQuit = (code: number): void => { void shutdown.request(code) }
+  taskGuard = new DesktopTaskGuard({
+    control: () => generation.tasks,
+    locale: () => runtime.locale,
+    show: options => showDesktopDialog(options),
+    log: message => electronLogger.error(message),
+  })
+  runtime.taskTransitionsProtected = true
+  runtime.protectUpdateInstall = async launch => {
+    await taskGuard.run('restart', async () => { await launch(); await shutdown.request(0) })
+  }
+  const immediateQuit = (code: number): void => { taskGuard.dispose(); void shutdown.request(code) }
+  let stopEnterpriseModels = () => {}
+  enterprise?.bindLock(async () => {
+    taskGuard.dispose()
+    stopEnterpriseModels()
+    nativeExit.requestRelaunch()
+    await shutdown!.request(0)
+  })
+  const requestQuit = (code: number): void => {
+    if (code !== 0) { immediateQuit(code); return }
+    void taskGuard.run('quit', () => shutdown.request(code)).catch(error => electronLogger.error(String(error)))
+  }
   removeUncaughtExceptionLogging = installDesktopUncaughtExceptionLogging(
     process,
     electronLogger,
     requestQuit,
   )
-  removeShutdownRequests = installShutdownRequests(process, app, requestQuit)
+  removeShutdownRequests = installShutdownRequests(process, app, requestQuit, immediateQuit)
+  // OS session end is not an interactive user quit. Never hold up Windows shutdown.
+  app.on('browser-window-created', (_event, window) => { window.on('session-end', () => immediateQuit(0)) })
 
   const openStartupRecoveryWindow = async (
     failureDetail: string,
@@ -640,7 +602,6 @@ async function start(): Promise<void> {
     await app.whenReady()
     startupStage = 'shell-environment'
     lifecycleRecorder.transitionStartupStage(startupStage)
-    if (process.platform === 'win32') app.setAppUserModelId(DESKTOP_APP_ID)
     if (app.isPackaged && process.cwd() === '/') process.chdir(app.getPath('home'))
     const shellEnvironmentResolution = await resolveDesktopShellEnvironment({
       environment: process.env,
@@ -698,7 +659,9 @@ async function start(): Promise<void> {
     const fallbackSource = channelHomeResolution.status === 'explicit' ? 'environment' : 'default'
     let dataDirectoryLocation: DesktopDataDirectoryLocation | undefined
     let homeDir: string
-    if (safeModePaths !== undefined) {
+    if (enterprise !== undefined) {
+      homeDir = safeModePaths?.homeDir ?? enterprise.paths.home
+    } else if (safeModePaths !== undefined) {
       homeDir = safeModePaths.homeDir
     } else {
       dataDirectoryLocation = resolveDesktopDataDirectory(
@@ -728,7 +691,7 @@ async function start(): Promise<void> {
     const pluginManagementStatePath = join(profileUserDataDir, 'plugin-management', 'state.json')
     const marketUserDataDir = profileUserDataDir
     const releaseUserDataLocations = desktopReleaseUserDataLocations(
-      app.getPath('appData'),
+      releaseUserDataRoot,
       marketUserDataDir,
     )
     const createFreshDesktopProfile = (name: string) => {
@@ -1066,7 +1029,7 @@ async function start(): Promise<void> {
               userDataDir: marketUserDataDir,
               protectedPaths: [
                 app.getPath('home'),
-                app.getPath('appData'),
+                releaseUserDataRoot,
                 desktopUserDataDir,
                 dirname(process.execPath),
                 process.cwd(),
@@ -1498,13 +1461,23 @@ async function start(): Promise<void> {
     if (profilePreferences === undefined) {
       throw new Error(`${BIN_NAME}: active Profile preferences were not initialized`)
     }
+    const enterpriseModels = enterprise ? await startEnterpriseModelBridge(enterprise.client, {
+      encrypt(value) {if(!safeStorage.isEncryptionAvailable()||(process.platform==='linux'&&safeStorage.getSelectedStorageBackend()==='basic_text'))throw new Error('System encryption unavailable');return safeStorage.encryptString(value).toString('base64')},
+      decrypt(value) {if(!safeStorage.isEncryptionAvailable()||(process.platform==='linux'&&safeStorage.getSelectedStorageBackend()==='basic_text'))throw new Error('System encryption unavailable');return safeStorage.decryptString(Buffer.from(value,'base64'))},
+    }) : undefined
+    if (enterpriseModels) {
+      stopEnterpriseModels = () => enterpriseModels.stop()
+      generation.own(() => enterpriseModels.stop())
+      prepareEnterpriseModels(prepared)
+    }
     if (process.env.DSH_DESKTOP_ISOLATED_HOST !== '0') {
       startupStage = 'host-boot'
       lifecycleRecorder.transitionStartupStage(startupStage)
       await startIsolatedDesktopHost({
         host: { prepared, profilePreferences, homeDir, activeProfileName, pluginManagementStatePath,
           selectionStatePath, marketUserDataDir, releaseUserDataLocations, desktopLaunchEnvironment,
-          desktopPnpmBootstrap, logDirectory: join(desktopUserDataDir, 'logs', 'host') },
+          desktopPnpmBootstrap, logDirectory: join(desktopUserDataDir, 'logs', 'host'),
+          ...(enterpriseModels ? { enterpriseModels: enterpriseModels.connection } : {}) },
         runtime, rendererToken: browserAccess.rendererHeader.value,
         prepareCertificate: prepareHostCertificate,
         bindHost: host => generation.bindHost(host), requestQuit,
@@ -1551,7 +1524,8 @@ async function start(): Promise<void> {
           // Keep Host imports and browser bundle discovery on the same public
           // profile-overlay resolver used by packaged Electron.
           hostCtx.loader.internal = undefined
-          generation.bindHost(hostCtx)
+          await installDesktopProfileContext(hostCtx, prepared)
+          generation.bindHost(hostCtx, installDesktopTaskControl(hostCtx))
           hostCtx.effect(
             () => async () => { await flushProfilePreferencesWrites() },
             'dsh-plugin-desktop: flush Profile preference writes',
@@ -1579,7 +1553,7 @@ async function start(): Promise<void> {
             openTerminal: () => { runtime.openTerminal() },
             requestRestart: () => runtime.requestRestart(),
           })
-          if (prepared.market.effective === 'community-market') {
+          {
             await hostCtx.plugin(DesktopPluginsService, {
               profileName: activeProfileName,
               homeDir,
@@ -1587,6 +1561,16 @@ async function start(): Promise<void> {
               installAnchor: desktopInstallAnchor(),
             })
           }
+          const pluginManager = new DesktopPluginManagerController({
+            profileName: activeProfileName, profileDir: prepared.profile.dir,
+            plugins: hostCtx.desktopPlugins, pnpm: () => hostCtx.get('desktopPnpm'),
+            runtime: () => [...hostCtx.loader.entries()].filter(entry => !entry.options.group).map(entry => ({
+              id: entry.id, moduleName: entry.options.name,
+              state: entry.disabled ? 'disabled' as const : entry.fiber?.state === 2 ? 'running' as const : entry.fiber?.state === 3 ? 'failed' as const : 'pending' as const,
+            })),
+          })
+          hostCtx.provide('desktopPluginManager', pluginManager)
+          hostCtx.effect(() => () => pluginManager.dispose(), 'desktop: plugin manager lifetime')
           if (logSink !== undefined) {
             fileExporter = new FileExporter(logSink)
             hostCtx.logger.exporter(fileExporter)
@@ -1663,7 +1647,7 @@ async function start(): Promise<void> {
                 : []
               return {
                 localUrl: hostCtx.connection.authenticatedUrl(
-                  desktopLoopbackBrowserUrl(hostCtx.webServer.port),
+                  desktopLoopbackBrowserUrl(hostCtx.webServer.port!),
                 ),
                 lanUrls: lanOrigins.map(url => hostCtx.connection.authenticatedUrl(url)),
                 lanState: lan.state,
@@ -1712,9 +1696,13 @@ async function start(): Promise<void> {
         releasePackageResolver()
         throw cause
       })
+      await installOfficialOffice(ctx)
+      if (enterpriseModels) await installEnterpriseModels(ctx, enterpriseModels.connection)
+      if (enterpriseModels) await installEnterpriseResources(ctx, enterpriseModels.connection, homeDir)
+      if (enterpriseModels) await installEnterpriseKnowledge(ctx, enterpriseModels.connection, homeDir)
       generation.bindHost(ctx)
-      fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
-      ctx.on('settings/updated', (namespace, next) => {
+      fileExporter?.setThreshold(readConfigForm<DesktopSettings>(ctx, DESKTOP_SETTINGS_NAMESPACE)?.logLevel ?? 'info')
+      watchConfigForms(ctx, (namespace, next) => {
         if (namespace === DESKTOP_SETTINGS_NAMESPACE) {
           fileExporter?.setThreshold((next as DesktopSettings).logLevel)
         }
@@ -1723,10 +1711,10 @@ async function start(): Promise<void> {
         const write = enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
           namespace === DESKTOP_SETTINGS_NAMESPACE
             ? next as DesktopSettings
-            : ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings,
+            : readConfigForm<DesktopSettings>(ctx, DESKTOP_SETTINGS_NAMESPACE)!,
           namespace === DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE
             ? next as DesktopNotificationSettings
-            : ctx.settings.get(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) as DesktopNotificationSettings,
+            : readConfigForm<DesktopNotificationSettings>(ctx, DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)!,
           current.market,
           current.aaEnabled === true,
         ))
@@ -1806,7 +1794,29 @@ async function start(): Promise<void> {
 
 async function run(): Promise<void> {
   app.setName(PRODUCT_NAME)
-  app.setPath('userData', join(app.getPath('appData'), DESKTOP_USER_DATA_DIRECTORY_NAME))
+  if (process.platform === 'win32') {
+    // Windows must know our identity before the enterprise login creates a HWND.
+    app.setAppUserModelId(DESKTOP_APP_ID)
+    if (!app.isPackaged) process.argv = consumeDesktopTaskbarLaunch(process.argv, process.env)
+    try { registerDesktopNotificationBranding() }
+    catch (cause) { process.stderr.write(`LETS notification branding: ${String(cause)}\n`) }
+  }
+  const desktopUserData = resolveDesktopUserDataDirectory({
+    environment: process.env,
+    platform: process.platform,
+    defaultAppDataDirectory: () => app.getPath('appData'),
+  })
+  app.setPath('userData', desktopUserData.userDataDir)
+  const relaunchCommand = process.platform === 'win32' ? desktopTaskbarRelaunchCommand(process.execPath, desktopDefaultRelaunchArguments(), {
+    development: !app.isPackaged,
+    enterprise: process.env.DSH_ENTERPRISE_MODE === '1',
+    ...(desktopUserData.source === 'environment' ? {userDataDir: desktopUserData.userDataDir} : {}),
+  }) : undefined
+  // Install once, before authentication. Windows requires the complete Relaunch
+  // identity to use our taskbar icon instead of the development electron.exe.
+  app.on('browser-window-created', (_event, window) => {
+    configureDesktopWindowBranding(window, process.platform, relaunchCommand)
+  })
   if (process.argv.includes('--export-diagnostics')) {
     try {
       await app.whenReady()
@@ -1830,7 +1840,25 @@ async function run(): Promise<void> {
     }
     return
   }
-  await start()
+  let enterpriseConfig: ReturnType<typeof enterpriseConfiguration>
+  try { enterpriseConfig = enterpriseConfiguration() }
+  catch (error) { await app.whenReady(); throw error }
+  if (enterpriseConfig !== undefined) {
+    await app.whenReady()
+    const enterprise = new DesktopEnterpriseLogin(desktopUserData.userDataDir, enterpriseConfig.origin)
+    // Keep the root single-instance lock while the pre-Host login window is visible.
+    if (!app.requestSingleInstanceLock()) { app.quit(); return }
+    const keepAlive = (): void => {}
+    app.on('window-all-closed', keepAlive)
+    try {
+      if (!await enterprise.authenticate()) { app.quit(); return }
+      enterprise.activateAccount()
+      await start(join(enterprise.paths.userData, '.release-user-data'), enterprise)
+    } finally { app.off('window-all-closed', keepAlive) }
+    enterprise.installAccountMenu()
+  } else {
+    await start(desktopUserData.releaseUserDataRoot)
+  }
 }
 
 /** Last-resort branch for launcher failures that happen before start's owned coordinator exists. */

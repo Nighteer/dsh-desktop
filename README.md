@@ -1,8 +1,10 @@
 <p align="center">
-  <a href="https://dshdesktop.cn"><img src="assets/desktop-hero-zh.png" alt="DSH Desktop：基于 DeepSeek Harness 构建的开源桌面客户端" width="100%"></a>
+  <a href="https://dshdesktop.cn"><img src="assets/desktop-hero-zh.png" alt="LETSDSH Desktop：基于 DeepSeek Harness 构建的开源桌面客户端" width="100%"></a>
 </p>
 
-<h1 align="center">DSH Desktop</h1>
+<h1 align="center">LETSDSH Desktop</h1>
+
+企业账号与管理后台开发见[企业开发与验收](docs/enterprise-development.md)。企业入口与普通开发入口独立，首次运行需初始化本机账号服务。
 
 <p align="center">
   <strong>基于 DeepSeek Harness 构建的 Windows 和 macOS 开源桌面客户端。</strong>
@@ -17,7 +19,7 @@
 <p align="center"><sub>独立的社区开源项目，与深度求索不存在隶属、合作、授权或背书关系。<br>本仓库目前无深度求索员工或 DeepSeek Harness 上游官方团队成员参与；GitHub Contributors 中显示的上游贡献者来自 fork 继承和同步的提交历史。<br>中文 · <a href="README.en.md">English</a></sub></p>
 
 <p align="center">
-  <img src="assets/desktop-chat-zh.png" alt="DSH Desktop 中文对话界面" width="100%">
+  <img src="assets/desktop-chat-zh.png" alt="LETSDSH Desktop 中文对话界面" width="100%">
 </p>
 
 <p align="center">
@@ -29,7 +31,7 @@
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows-4493F8?style=flat-square" alt="Supported platforms: macOS and Windows">
 </p>
 
-DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的本地 Web UI、Host 服务和插件系统集成到原生桌面应用中。项目固定并原样运行特定上游版本；DSH Desktop 提供窗口、托盘、终端、更新和工作配置，并通过 DeepSeek Harness 提供的插件机制与上游能力组合。
+LETSDSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的本地 Web UI、Host 服务和插件系统集成到原生桌面应用中。项目固定并原样运行特定上游版本；LETSDSH Desktop 提供窗口、托盘、终端、更新和工作配置，并通过 DeepSeek Harness 提供的插件机制与上游能力组合。代码中的 `dsh-plugin-desktop` 包名、App ID 与用户数据目录继续保留，确保现有安装和 Profile 可以平滑升级。
 
 <a id="run"></a>
 
@@ -40,7 +42,7 @@ DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
 | 平台 | 下载 | 安装方式 |
 | --- | --- | --- |
 | Windows x64 | [下载安装程序](https://www.dshdesktop.cn/api/downloads/windows) | 运行 NSIS 安装程序并按提示完成安装 |
-| macOS Universal | [下载 DMG](https://www.dshdesktop.cn/api/downloads/mac) | 打开 DMG，将 DSH Desktop 拖入 Applications |
+| macOS Universal | [下载 DMG](https://www.dshdesktop.cn/api/downloads/mac) | 打开 DMG，将 LETSDSH Desktop 拖入 Applications |
 
 详细步骤、插件命令和故障排查见[用户指南](docs/user-guide.md)与[常见问题](docs/faq.md)。
 
@@ -168,6 +170,8 @@ git submodule update --init --recursive
 corepack yarn install --immutable
 corepack yarn dev
 ```
+
+网页界面开发使用 `corepack yarn dev:web:beta`（Beta，默认端口 5174）或 `corepack yarn dev:web`（稳定版，默认端口 5173）。首次运行前先构建对应桌面包。命令会启动真实的本机 Host、打开浏览器，并监听对应包的 `src/client/**`；保存源码后快速重建并自动刷新页面。开发数据独立存放在 `.runtime-dsh-home/web-beta` 或 `web-stable` 中。此预览默认使用扩展布局，支持通过 `DSH_DESKTOP_DEV_MODE` 和 `DSH_DESKTOP_DEV_PORT` 选择模式及端口；Electron 原生操作仍需桌面调试，`src/native-ui/**` 不属于此监听范围。加上 `--no-open` 可以只启动服务；Ctrl+C 停止服务与监听。
 
 headless 检查使用 `corepack yarn check`；完整的构建、测试和发布边界见[架构说明](docs/architecture.md)和包级 [`README`](dsh-plugin-desktop/README.md)。如何参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 

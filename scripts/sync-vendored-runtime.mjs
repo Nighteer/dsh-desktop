@@ -18,8 +18,8 @@ const mode = process.argv[2]
 const channelFlag = process.argv.indexOf('--channel')
 const requestedChannel = channelFlag === -1 ? undefined : process.argv[channelFlag + 1]
 
-if (mode !== '--write' && mode !== '--check') {
-  throw new Error('usage: node scripts/sync-vendored-runtime.mjs <--write|--check> [--channel stable|beta]')
+if (!['--write', '--check', '--adopt-registry'].includes(mode)) {
+  throw new Error('usage: node scripts/sync-vendored-runtime.mjs <--write|--check|--adopt-registry> [--channel stable|beta]')
 }
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'))
@@ -72,7 +72,10 @@ function packageName(filename) {
 function expectedResolution(entry) {
   const source = `file:${vendorRelative}/${entry.filename}`
   const unscoped = entry.name.slice('@deepseek-ai/'.length)
-  const patchRelative = `patches/${unscoped}@${version}.patch`
+  const patchRelative = entry.name === '@deepseek-ai/dsh-client-ui-conversation'
+    && existsSync(join(root, `patches/${unscoped}-ppt@${version}.patch`))
+    ? `patches/${unscoped}-ppt@${version}.patch`
+    : `patches/${unscoped}@${version}.patch`
   return existsSync(join(root, patchRelative))
     ? `patch:${entry.name}@${source.replace(':', '%3A')}#./${patchRelative}`
     : source
@@ -210,5 +213,40 @@ function checkVendor() {
   )
 }
 
+function adoptRegistryVendor() {
+  const manifest = readJson(manifestPath)
+  if (manifest.artifactOrigin !== 'official-npm-registry' || manifest.version !== version || manifest.commit !== upstream.commit) fail('registry manifest does not match the reviewed source release')
+  for (const entry of manifest.packages) {
+    const path = join(vendorDirectory, entry.filename)
+    if (sha256(path) !== entry.sha256) fail(`registry artifact checksum mismatch: ${entry.name}`)
+  }
+  upstream.runtimePackageVersion = version
+  upstream.runtimeSource = `${vendorRelative}/manifest.json`
+  writeJson(upstreamPath, upstreamDocument)
+  const workspace = readJson(workspacePath)
+  // Preserve previous generations and their selectors for rollback; add the new, exact family.
+  for (const entry of manifest.packages) {
+    workspace.resolutions[resolutionSelector(entry.name)] = expectedResolution(entry)
+    workspace.resolutions[resolutionSelector(entry.name, `^${version}`)] = expectedResolution(entry)
+  }
+  writeJson(workspacePath, workspace)
+  const names = new Set(manifest.packages.map(entry => entry.name))
+  for (const path of pluginPaths) {
+    const plugin = readJson(path)
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+      for (const name of Object.keys(plugin[field] ?? {})) {
+        if (!isDshPackage(name)) continue
+        if (names.has(name)) plugin[field][name] = version
+        else {
+          process.stdout.write(`Removed withdrawn ${relative(root, path)} dependency: ${name}\n`)
+          delete plugin[field][name]
+        }
+      }
+    }
+    writeJson(path, plugin)
+  }
+}
+
 if (mode === '--write') writeVendor()
+if (mode === '--adopt-registry') adoptRegistryVendor()
 checkVendor()

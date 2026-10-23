@@ -20,6 +20,14 @@ const rpc = new HostRpc({
 let host: DesktopStartupGenerationHost | undefined
 let inspectServices = () => ({ aaRuntime: false, aaOnboarding: false })
 rpc.handle('status', () => ({ pid: process.pid, services: inspectServices() }))
+rpc.handle('tasks:quit', () => {
+  if (!host?.tasks) throw new Error('LETS task services are unavailable')
+  return host.tasks.inspectQuit()
+})
+rpc.handle('tasks:update', ([action]: unknown[]) => {
+  if (!host?.tasks || !['inspect', 'lock', 'unlock'].includes(String(action))) throw new Error('Invalid task operation')
+  return host.tasks.updateTasks(action as 'inspect' | 'lock' | 'unlock')
+})
 let starting = false
 let stopping = false
 let lan: DesktopLanHttpsRuntime | undefined

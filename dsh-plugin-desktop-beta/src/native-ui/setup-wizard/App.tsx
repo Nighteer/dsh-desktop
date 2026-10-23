@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -19,6 +19,7 @@ import {
   type DesktopSetupWizardWindowsMaterial,
 } from '../../setup-wizard-contract.ts'
 import { desktopSetupWizardCopy, type DesktopSetupWizardCopy } from '../../setup-wizard-copy.ts'
+import { DESKTOP_RELEASE_CHANNEL } from '../../product-identity.ts'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
 import { Badge } from '../components/ui/badge.tsx'
 import { Button } from '../components/ui/button.tsx'
@@ -40,6 +41,7 @@ import { DesktopFrame } from '../shared/DesktopFrame.tsx'
 
 const SCHEME = 'dsh-setup-wizard:'
 const MAX_STATE_CHARACTERS = 32 * 1024
+const IS_BETA_RELEASE = String(DESKTOP_RELEASE_CHANNEL) === 'beta'
 
 type Locale = 'en' | 'zh'
 
@@ -47,7 +49,6 @@ export type DesktopSetupWizardStep =
   | 'welcome'
   | 'mode'
   | 'material'
-  | 'aa'
   | 'market'
   | 'notifications'
   | 'browser'
@@ -58,7 +59,6 @@ export const DESKTOP_SETUP_WIZARD_STEPS = Object.freeze([
   'mode',
   'material',
   'market',
-  'aa',
   'notifications',
   'browser',
   'success',
@@ -385,8 +385,6 @@ function NotificationOptions({
     <div className="space-y-3 border-l pl-4">
       <ToggleRow checked={notifications.notifyOnTurnCompletion} disabled={!notifications.enabled} id="setup-turn-completion" label={copy.turnCompletion} onChange={checked => { set('notifyOnTurnCompletion', checked) }} />
       <ToggleRow checked={notifications.notifyOnTurnFailure} disabled={!notifications.enabled} id="setup-turn-failure" label={copy.turnFailure} onChange={checked => { set('notifyOnTurnFailure', checked) }} />
-      <ToggleRow checked={notifications.notifyOnJobCompletion} disabled={!notifications.enabled} id="setup-job-completion" label={copy.jobCompletion} onChange={checked => { set('notifyOnJobCompletion', checked) }} />
-      <ToggleRow checked={notifications.notifyOnJobFailure} disabled={!notifications.enabled} id="setup-job-failure" label={copy.jobFailure} onChange={checked => { set('notifyOnJobFailure', checked) }} />
     </div>
   </div>
 }
@@ -450,20 +448,6 @@ export function SetupWizardStepPage({
 }): JSX.Element {
   if (step === 'mode') return <Page step={step} subtitle={copy.presentationBody} title={copy.presentationTitle}><ModeOptions copy={copy} input={input} selection={selection} update={update} /></Page>
   if (step === 'material') return <Page step={step} subtitle={copy.windowMaterialBody} title={copy.windowMaterial}><MaterialOptions copy={copy} input={input} selection={selection} update={update} /></Page>
-  if (step === 'aa') return <Page step={step} subtitle={copy.aaIntro} title={copy.aaTitle}>
-    <RadioGroup aria-label={copy.aaTitle} name="setup-aa" value={String(selection.aaEnabled === true)}
-      onValueChange={value => { if (value === 'true' || value === 'false') update({ ...selection, aaEnabled: value === 'true' }) }}>
-      {[false, true].map(enabled => <Choice key={String(enabled)} id={`setup-aa-${String(enabled)}`}
-        value={String(enabled)} selected={(selection.aaEnabled === true) === enabled}
-        title={enabled ? copy.aaEnabled : copy.aaDisabled} body={enabled ? copy.aaEnabledBody : copy.aaDisabledBody}
-        {...(enabled ? { badge: copy.beta } : {})} />)}
-    </RadioGroup>
-    {selection.aaEnabled === true && <aside className="mt-4 space-y-2 rounded-xl border bg-muted/30 p-4" role="status">
-      <h2 className="text-sm font-semibold">{copy.aaNextTitle}</h2>
-      <p className="text-sm leading-relaxed text-muted-foreground">{copy.aaNextBody}</p>
-      <p className="text-xs leading-relaxed text-muted-foreground">{copy.aaNextDesktop}</p>
-    </aside>}
-  </Page>
   if (step === 'market') return <Page step={step} subtitle={copy.marketBody} title={copy.marketTitle}><MarketOptions copy={copy} selection={selection} update={update} /></Page>
   if (step === 'notifications') return <Page step={step} subtitle={copy.notificationsBody} title={copy.notificationsTitle}><NotificationOptions copy={copy} notifications={selection.notifications} update={notifications => { update({ ...selection, notifications }) }} /></Page>
   if (step === 'browser') return <Page step={step} subtitle={copy.browserBody} title={copy.browserTitle}><BrowserOptions copy={copy} requestBrowserAccess={requestBrowserAccess} requestExposure={requestExposure} selection={selection} /></Page>
@@ -513,9 +497,9 @@ export function SetupWizardWelcome({
         <h1 className="text-2xl font-semibold tracking-tight">{copy.welcomeTitle}</h1>
         <Badge
           className="mb-0.5 px-1.5 py-0 text-[10px] leading-4"
-          data-beta-placement="title-bottom-right"
+          data-release-channel={DESKTOP_RELEASE_CHANNEL}
           variant="secondary"
-        >{copy.beta} · v{appVersion}</Badge>
+        >{IS_BETA_RELEASE ? `${copy.beta} · ` : ''}v{appVersion}</Badge>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.welcomeBody}</p>
       <Card className="mt-7 w-full text-left">
@@ -671,6 +655,10 @@ export function SetupWizardApp(): JSX.Element {
   const [lanAcknowledged, setLanAcknowledged] = useState(false)
   const [confirmLan, setConfirmLan] = useState<LanConfirmationReason>()
   const [confirmBrowserCompatibility, setConfirmBrowserCompatibility] = useState(false)
+  useEffect(() => {
+    document.title = copy.title
+    document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en'
+  }, [copy.title, locale])
   if (input === undefined || selection === undefined) {
     return <><DesktopFrame /><main className="dshNativeContent flex h-screen items-center justify-center p-6"><div className="w-full max-w-lg space-y-4"><Alert variant="destructive"><AlertTriangle /><AlertTitle>{copy.title}</AlertTitle><AlertDescription>{copy.invalidState}</AlertDescription></Alert><div className="flex justify-end"><SetupWizardSkipDialog copy={copy} onSkip={() => { window.location.assign(`${SCHEME}//skip`) }} outlined /></div></div></main></>
   }

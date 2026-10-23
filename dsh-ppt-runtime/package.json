@@ -1,0 +1,58 @@
+{
+  "name": "dsh-ppt",
+  "version": "0.1.1-lets.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": ".build/ppt-runtime/packages/dsh-ppt/lib/index.js",
+  "bin": {
+    "dsh-pptd": ".build/ppt-runtime/packages/dsh-ppt/lib/bin.js"
+  },
+  "files": [
+    ".build/ppt-runtime/packages/dsh-ppt",
+    ".build/ppt-runtime/packages/dsh-ppt-composer/lib",
+    "PROVENANCE.md"
+  ],
+  "exports": {
+    ".": "./.build/ppt-runtime/packages/dsh-ppt/lib/index.js",
+    "./client": "./.build/ppt-runtime/packages/dsh-ppt-composer/lib/client.js",
+    "./pptd": "./.build/ppt-runtime/packages/dsh-ppt/lib/pptd.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@aiden0z/pptx-renderer": "1.2.4",
+    "@deepseek-ai/libreoffice-kit": "0.1.3",
+    "@deepseek-ai/schemastery": "3.18.2",
+    "esbuild": "0.25.12",
+    "fflate": "0.8.3",
+    "js-yaml": "4.2.0",
+    "jsdom": "29.1.1",
+    "pptxgenjs": "4.0.1",
+    "saxes": "6.0.0",
+    "sharp": "0.35.3",
+    "typescript": "6.0.3",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.2 || ^0.1.6-alpha.2 || ^0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "^0.1.5-rc.2 || ^0.1.6-alpha.2 || ^0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.2 || ^0.1.6-alpha.2 || ^0.2.1-rc.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

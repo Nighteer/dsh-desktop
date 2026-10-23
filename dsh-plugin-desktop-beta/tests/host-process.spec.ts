@@ -9,8 +9,10 @@ import { startIsolatedDesktopHost, type IsolatedHostOptions } from '../src/host-
 function fixture() {
   const child = Object.assign(new EventEmitter(), {
     stdout: new EventEmitter(), stderr: new EventEmitter(),
-    postMessage: vi.fn((message: { kind: string; id: number; method?: string }) => {
-      if (message.kind === 'call') queueMicrotask(() => child.emit('message', { kind: 'result', id: message.id, value: { pid: 123 } }))
+    postMessage: vi.fn((message: { kind: string; id: number; method?: string; args?: unknown[] }) => {
+      const value = message.method === 'tasks:quit' ? {activeTasks: false, scheduledTasks: true}
+        : message.method === 'tasks:update' ? message.args?.[0] === 'lock' : {pid: 123}
+      if (message.kind === 'call') queueMicrotask(() => child.emit('message', { kind: 'result', id: message.id, value }))
     }),
     kill: vi.fn(() => { queueMicrotask(() => child.emit('exit', 0)); return true }),
   })
@@ -40,4 +42,14 @@ it('reports unexpected Host exit without automatically relaunching or replaying 
   expect(f.onFailure).toHaveBeenCalledOnce()
   await f.host().fiber.dispose()
   expect(f.child.kill).not.toHaveBeenCalled()
+})
+it('forwards task inspection and admission locks only while the child is ready', async () => {
+  const f = fixture()
+  await startIsolatedDesktopHost(f.options)
+  const tasks = f.host().tasks!
+  expect(await tasks.inspectQuit()).toEqual({activeTasks: false, scheduledTasks: true})
+  expect(await tasks.updateTasks('lock')).toBe(true)
+  expect(await tasks.updateTasks('unlock')).toBe(false)
+  await f.host().fiber.dispose()
+  expect(f.host().tasks).toBeUndefined()
 })

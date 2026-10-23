@@ -1,0 +1,47 @@
+/* Native-only sizing; outrank the shared stylesheet even when emitted after this chunk. */
+html.enterprise-admin.enterprise-desktop-login {
+  scrollbar-width: thin;
+  scrollbar-color: #c1cfdd transparent;
+}
+html.enterprise-admin.enterprise-desktop-login .admin-auth {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+html.enterprise-admin.enterprise-desktop-login .admin-auth-story {
+  flex: none;
+  gap: 0;
+  padding: 24px 32px 0;
+  border: 0;
+  background: var(--surface);
+}
+html.enterprise-admin.enterprise-desktop-login .admin-auth-story > div:not(.brand),
+html.enterprise-admin.enterprise-desktop-login .admin-auth-story > footer {
+  display: none;
+}
+html.enterprise-admin.enterprise-desktop-login .admin-auth-story .brand { font-size: 24px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-story .brand img { width: 32px; height: 42px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form { flex: 1; padding: 24px 32px; align-items: center; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-card { max-width: 400px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-body h1 { font-size: 25px; margin-bottom: 8px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-body > p.muted { margin-bottom: 18px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-service { margin: 14px 0; padding: 10px 12px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-card label { margin-bottom: 16px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .password-field > label { margin-bottom: 0; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-foot { margin-top: 16px; }
+html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-security { margin-top: 16px; padding-top: 14px; }
+
+/* Short windows still keep readable inputs and normal document scrolling. */
+@media (max-height: 680px) {
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-story { padding-top: 16px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-story .brand { font-size: 22px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-story .brand img { width: 28px; height: 36px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form { padding: 16px 32px 20px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-body > p.muted { margin-bottom: 14px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-service { margin: 10px 0; padding: 8px 12px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-card label { margin-bottom: 12px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .password-field { margin-bottom: 12px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .password-field > label { margin-bottom: 0; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-foot { margin-top: 12px; }
+  html.enterprise-admin.enterprise-desktop-login .admin-auth-form .login-security { margin-top: 12px; padding-top: 12px; }
+}

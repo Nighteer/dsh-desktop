@@ -53,6 +53,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       notify: notification => { void send('update:notify', [notification]) },
     },
     schedule(spec) {
+      locale = spec.readLocalePreference() ?? snapshot.locale
       const callback = callbacks({ quit: spec.requestQuit, mode: spec.requestModeChange,
         ...(spec.readRemoteControl ? { remoteRead: spec.readRemoteControl } : {}),
         ...(spec.enableRemoteControl ? { remoteEnable: spec.enableRemoteControl } : {}),
@@ -68,6 +69,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       setup.length = 0
       booting = false
       for (const [id, spec] of shellSpecs) {
+        locale = spec.readLocalePreference() ?? snapshot.locale
         await send('shell:preferences', [id, spec.readLocalePreference(), spec.readThemeSource()])
       }
     },

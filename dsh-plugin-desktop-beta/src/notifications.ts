@@ -1,15 +1,15 @@
-/** Privacy-safe desktop attention for completed user turns and background jobs. */
+/** Privacy-safe desktop attention for completed direct-user replies, never internal jobs. */
 
-import type { Context } from '@deepseek-ai/cordis'
-import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
-import type { DesktopLocale, DesktopNotification } from './runtime.ts'
+import type { DesktopNotification } from './runtime.ts'
+import { desktopConfigScope } from './config-forms.ts'
 
 export const name = 'desktop-notifications'
 export const inject = ['desktopRuntime']
 
-export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'dsh-desktop-notifications'
+export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'desktop-notifications'
 
 export interface DesktopNotificationSettings {
   enabled: boolean
@@ -28,40 +28,22 @@ export const DesktopNotificationSettingsSchema: z<DesktopNotificationSettings> =
 })
 
 const DEFAULT_SETTINGS = DesktopNotificationSettingsSchema({} as DesktopNotificationSettings)
+export const Config = z.object({
+  enabled: z.boolean().default(true).volatile(),
+  notifyOnTurnCompletion: z.boolean().default(true).volatile(),
+  notifyOnTurnFailure: z.boolean().default(true).volatile(),
+  notifyOnJobCompletion: z.boolean().default(true).volatile(),
+  notifyOnJobFailure: z.boolean().default(true).volatile(),
+})
 
-type NotificationOutcome = 'turn-completed' | 'turn-failed' | 'job-completed' | 'job-failed'
-
-const NOTIFICATION_COPY: Record<DesktopLocale, Record<NotificationOutcome, DesktopNotification>> = {
-  en: {
-    'turn-completed': { title: 'User Turn Completed', body: 'A user-initiated turn has finished.' },
-    'turn-failed': { title: 'User Turn Failed', body: 'A user-initiated turn could not finish. Open DSH Desktop for details.' },
-    'job-completed': { title: 'Background Job Completed', body: 'A background job has finished.' },
-    'job-failed': { title: 'Background Job Failed', body: 'A background job could not finish. Open DSH Desktop for details.' },
-  },
-  zh: {
-    'turn-completed': { title: '用户回合已完成', body: '一个由你发起的回合已完成。' },
-    'turn-failed': { title: '用户回合失败', body: '一个由你发起的回合未能完成，请打开 DSH Desktop 查看详情。' },
-    'job-completed': { title: '后台任务已完成', body: '有一个后台任务已结束。' },
-    'job-failed': { title: '后台任务失败', body: '一个后台任务未能完成，请打开 DSH Desktop 查看详情。' },
-  },
+const NOTIFICATION_COPY: Record<'turn-completed' | 'turn-failed', DesktopNotification> = {
+  'turn-completed': { title: 'LETS · 回复已完成', body: '本轮回复已结束，请打开 LETS 查看结果。文件是否可用请以对话中的交付结果为准。' },
+  'turn-failed': { title: 'LETS · 本轮处理未完成', body: '本轮处理遇到问题，请打开 LETS 查看详情后重试。' },
 }
 
 interface OpenTurn {
   readonly turn: number
   userInitiated: boolean
-}
-
-function notifyJob(
-  runtime: Context['desktopRuntime'],
-  settings: DesktopNotificationSettings,
-  snapshot: JobSnapshot,
-): void {
-  if (!settings.enabled) return
-  if (snapshot.status === 'completed' && settings.notifyOnJobCompletion) {
-    runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['job-completed'])
-  } else if (snapshot.status === 'failed' && settings.notifyOnJobFailure) {
-    runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['job-failed'])
-  }
 }
 
 function trackTurn(
@@ -93,23 +75,19 @@ function trackTurn(
 
   const reason = event.data.reason.kind
   if (reason === 'completed' && settings.notifyOnTurnCompletion) {
-    runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['turn-completed'])
+    runtime.notifyAttention(NOTIFICATION_COPY['turn-completed'])
   } else if ((reason === 'error' || reason === 'max-tokens') && settings.notifyOnTurnFailure) {
-    runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['turn-failed'])
+    runtime.notifyAttention(NOTIFICATION_COPY['turn-failed'])
   }
 }
 
-/** Register independently optional settings, job, and live-session observers. */
-export function apply(ctx: Context): void {
-  let settings = DEFAULT_SETTINGS
+/** Register optional settings and live-session observers. */
+export function apply(ctx: Context, config: { [K in keyof DesktopNotificationSettings]: Volatile<boolean> }): void {
+  let settings = Object.fromEntries(Object.entries(config).map(([key, value]) => [key, value.get()])) as unknown as DesktopNotificationSettings
 
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.effect(() => {
-      const scope = settingsCtx.settings.register(
-        DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
-        DesktopNotificationSettingsSchema,
-        { applies: 'live' },
-      )
+      const scope = desktopConfigScope(settingsCtx, DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE, settings)
       settings = scope.get()
       const stopWatching = scope.watch((next) => { settings = next })
       return () => {
@@ -119,12 +97,8 @@ export function apply(ctx: Context): void {
     }, 'dsh-plugin-desktop: native notification settings')
   })
 
-  ctx.inject(['jobs'], (jobsCtx) => {
-    jobsCtx.effect(
-      () => jobsCtx.jobs.onJobDone(snapshot => { notifyJob(jobsCtx.desktopRuntime, settings, snapshot) }),
-      'dsh-plugin-desktop: background job attention',
-    )
-  })
+  // Legacy job settings remain readable for backward compatibility, but an
+  // internal command's exit is not completion of the user's requested work.
 
   ctx.inject(['sessions'], (sessionsCtx) => {
     sessionsCtx.effect(() => {

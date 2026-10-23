@@ -146,7 +146,7 @@ try {
     BIN_NAME,
     prepared.rootConfig,
     [{ insert: [
-      { id: 'desktop-shell', name: 'dsh-plugin-desktop-beta' },
+      { id: 'desktop-shell', name: 'dsh-plugin-desktop-beta',config:{mode:'compatibility'} },
       { id: 'community-market', name: 'dsh-community-market' },
       { id: 'third-party-smoke', name: THIRD_PARTY_NAME },
     ] }],
@@ -172,18 +172,13 @@ try {
         },
         requestRejection() { return undefined },
       })
-      host.provide('webRuntime', {})
+      host.provide('webApp', {})
       host.provide('appExit', () => {})
       host.provide('settings', {
-        register() {
-          return {
-            get: () => ({ mode: 'compatibility' }),
-            watch: () => () => {},
-            update: async () => {},
-            replace: async () => {},
-          }
-        },
+        describe:()=>[{ns:'desktop-shell',value:{mode:'compatibility',macosMaterial:'transparent',windowsMaterial:'off',port:43120,openBrowser:false,networkExposure:'loopback',logLevel:'info'}},{ns:'community-market',value:{sources:[]}}],
+        update:async()=>{},
       })
+
     },
     prepared.bareModuleBaseUrl,
   )

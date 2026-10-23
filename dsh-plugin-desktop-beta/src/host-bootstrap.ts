@@ -1,5 +1,6 @@
 /** Headless bootstrap for the Beta isolated Host experiment. */
 import { boot, resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
+import { readConfigForm, watchConfigForms } from './config-forms.ts'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DESKTOP_PACKAGE_NAME as BIN_NAME } from './product-identity.ts'
@@ -10,11 +11,12 @@ import { createDesktopWebProfile, listDesktopProfiles, canDeleteDesktopProfile, 
 import { DesktopProfileService } from './profile-service.ts'
 import { DesktopActionsService } from './desktop-actions.ts'
 import { clearDesktopProfilePluginState, DesktopPluginsService } from './desktop-plugins.ts'
+import { DesktopPluginManagerController } from './desktop-plugin-manager.ts'
 import { desktopMarketSnapshotWithEffective, selectDesktopMarketProvider, type DesktopMarketProvider, type DesktopMarketSnapshot } from './desktop-market.ts'
 import DesktopSettingsController from './desktop-settings-controller.ts'
 import { clearDesktopProfilePreferences, desktopProfilePreferencesFromSettings, writeDesktopProfilePreferences, type DesktopProfilePreferences, type DesktopProfilePreferencesStateV1 } from './profile-preferences.ts'
 import { clearDesktopProfileUsageHistory, type DesktopReleaseUserDataLocations } from './profile-channel-admission.ts'
-import { desktopInstallAnchor, type PreparedDesktopProfile } from './profile.ts'
+import { desktopInstallAnchor, installDesktopProfileContext, type PreparedDesktopProfile } from './profile.ts'
 import { desktopLanBrowserUrls, desktopLoopbackBrowserUrl } from './desktop-network.ts'
 import { DESKTOP_LAN_HTTPS_CA_PATH, type DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
 import type { DesktopBrowserAccess } from './desktop-browser-access.ts'
@@ -23,6 +25,12 @@ import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 import { FileExporter } from './file-exporter.ts'
 import { LogFileSink } from './log-files.ts'
+import { installEnterpriseModels } from './enterprise-models.ts'
+import { installEnterpriseResources } from './enterprise-resources.ts'
+import {installEnterpriseKnowledge} from './enterprise-knowledge.ts'
+import {installOfficialOffice} from './official-office.ts'
+import { installDesktopTaskControl } from './desktop-task-control.ts'
+import type { EnterpriseModelConnection } from './enterprise-model-bridge.ts'
 
 function desktopProfileMarketSnapshot(market: DesktopMarketProvider): DesktopMarketSnapshot {
   return Object.freeze({
@@ -33,6 +41,7 @@ function desktopProfileMarketSnapshot(market: DesktopMarketProvider): DesktopMar
 }
 
 export interface DesktopHostOptions {
+  enterpriseModels?: EnterpriseModelConnection
   prepared: PreparedDesktopProfile
   profilePreferences: DesktopProfilePreferences
   homeDir: string
@@ -97,7 +106,8 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         // Keep Host imports and browser bundle discovery on the same public
         // profile-overlay resolver used by packaged Electron.
         hostCtx.loader.internal = undefined
-        bindHost(hostCtx)
+        await installDesktopProfileContext(hostCtx, prepared)
+        bindHost({ fiber: hostCtx.fiber, tasks: installDesktopTaskControl(hostCtx) })
         hostCtx.effect(() => () => logSink.close(), 'dsh-plugin-desktop: Host log sink')
         hostCtx.effect(
           () => async () => { await flushProfilePreferencesWrites() },
@@ -116,7 +126,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
           openTerminal: () => { runtime.openTerminal() },
           requestRestart: () => runtime.requestRestart(),
         })
-        if (prepared.market.effective === 'community-market') {
+        {
           await hostCtx.plugin(DesktopPluginsService, {
             profileName: activeProfileName,
             homeDir,
@@ -124,6 +134,16 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
             installAnchor: desktopInstallAnchor(),
           })
         }
+        const pluginManager = new DesktopPluginManagerController({
+          profileName: activeProfileName, profileDir: prepared.profile.dir,
+          plugins: hostCtx.desktopPlugins, pnpm: () => hostCtx.get('desktopPnpm'),
+          runtime: () => [...hostCtx.loader.entries()].filter(entry => !entry.options.group).map(entry => ({
+            id: entry.id, moduleName: entry.options.name,
+            state: entry.disabled ? 'disabled' as const : entry.fiber?.state === 2 ? 'running' as const : entry.fiber?.state === 3 ? 'failed' as const : 'pending' as const,
+          })),
+        })
+        hostCtx.provide('desktopPluginManager', pluginManager)
+        hostCtx.effect(() => () => pluginManager.dispose(), 'desktop: plugin manager lifetime')
         if (logSink !== undefined) {
           fileExporter = new FileExporter(logSink)
           hostCtx.logger.exporter(fileExporter)
@@ -200,7 +220,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
               : []
             return {
               localUrl: hostCtx.connection.authenticatedUrl(
-                desktopLoopbackBrowserUrl(hostCtx.webServer.port),
+                desktopLoopbackBrowserUrl(hostCtx.webServer.port!),
               ),
               lanUrls: lanOrigins.map(url => hostCtx.connection.authenticatedUrl(url)),
               lanState: lan.state,
@@ -249,9 +269,14 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
       releasePackageResolver()
       throw cause
     })
-    bindHost(ctx)
-    fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
-    ctx.on('settings/updated', (namespace, next) => {
+    await installOfficialOffice(ctx)
+    if (options.enterpriseModels) await installEnterpriseModels(ctx, options.enterpriseModels)
+    if (options.enterpriseModels) await installEnterpriseResources(ctx, options.enterpriseModels, homeDir)
+    if (options.enterpriseModels) await installEnterpriseKnowledge(ctx, options.enterpriseModels, homeDir)
+    // Keep the early binding: it owns both the Host fiber and task control.
+    // Rebinding the plain Context here would discard tasks after startup.
+    fileExporter?.setThreshold(readConfigForm<DesktopSettings>(ctx, DESKTOP_SETTINGS_NAMESPACE)?.logLevel ?? 'info')
+    watchConfigForms(ctx, (namespace, next) => {
       if (namespace === DESKTOP_SETTINGS_NAMESPACE) {
         fileExporter?.setThreshold((next as DesktopSettings).logLevel)
       }
@@ -260,10 +285,10 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
       const write = enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
         namespace === DESKTOP_SETTINGS_NAMESPACE
           ? next as DesktopSettings
-          : ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings,
+          : readConfigForm<DesktopSettings>(ctx, DESKTOP_SETTINGS_NAMESPACE)!,
         namespace === DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE
           ? next as DesktopNotificationSettings
-          : ctx.settings.get(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) as DesktopNotificationSettings,
+          : readConfigForm<DesktopNotificationSettings>(ctx, DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)!,
         current.market,
         current.aaEnabled === true,
       ))

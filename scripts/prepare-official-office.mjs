@@ -1,0 +1,128 @@
+/** Prepare the pinned upstream Office payload in fresh directories only. */
+import {spawnSync} from 'node:child_process'
+import {createHash,randomUUID} from 'node:crypto'
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,renameSync,writeFileSync} from 'node:fs'
+import {createRequire,registerHooks} from 'node:module'
+import {dirname,join,resolve,sep} from 'node:path'
+import {fileURLToPath,pathToFileURL} from 'node:url'
+
+const root=resolve(import.meta.dirname,'..')
+const edition=process.argv.includes('--stable')?'dsh-plugin-desktop':'dsh-plugin-desktop-beta'
+const publishBoth=process.argv.includes('--both')
+const desktopRequire=createRequire(join(root,edition,'package.json'))
+const target=process.platform==='win32'?'win-x64':`${process.platform==='darwin'?'mac':'linux'}-${process.arch}`
+if(process.platform==='win32'&&process.arch!=='x64')throw Error('Official Windows Office payload currently supports x64 only')
+const lockPath=join(root,'deepseek-harness/scripts/primary-runtime/lock.json')
+const lock=JSON.parse(readFileSync(lockPath,'utf8'))
+if(!lock.targets[target])throw Error(`Unsupported Office target: ${target}`)
+const version=JSON.parse(readFileSync(join(root,edition,'package.json'),'utf8')).version
+const inputs=createHash('sha256').update(readFileSync(lockPath)).update(version).digest('hex')
+const destination=join(root,edition,'build/official-office')
+const currentPath=join(destination,'current.json')
+if(existsSync(currentPath)){
+  const current=JSON.parse(readFileSync(currentPath,'utf8'))
+  if(current.inputs!==inputs)throw Error('Existing official Office snapshot differs; preserve it and prepare an explicitly reviewed update')
+  if(!/^[a-f0-9]{64}$/u.test(current.directory)||!existsSync(join(destination,current.directory,'primary-runtime/runtime.json')))throw Error('Existing Office pointer is invalid')
+  if(publishBoth){
+    for(const name of ['dsh-plugin-desktop-beta','dsh-plugin-desktop']){
+      const pointer=join(root,name,'build/official-office/current.json')
+      if(!existsSync(pointer))throw Error(`Missing ${name} Office snapshot; preserve the existing snapshot and complete preparation explicitly`)
+      const peer=JSON.parse(readFileSync(pointer,'utf8'))
+      if(peer.directory!==current.directory||peer.coreVersion!==current.coreVersion)throw Error('Desktop editions have different official Office snapshots')
+      if(!existsSync(join(root,name,'build/official-office',peer.directory,'primary-runtime/runtime.json')))throw Error(`Incomplete ${name} Office snapshot`)
+    }
+  }
+  console.log(`Official Office already prepared: ${destination}`)
+  process.exit(0)
+}
+
+const privateRoot=join(root,'.enterprise-local')
+mkdirSync(privateRoot,{recursive:true})
+const resume=process.argv.find(value=>value.startsWith('--resume='))?.slice('--resume='.length)
+const work=resume?resolve(resume):mkdtempSync(join(privateRoot,'official-office-build-'))
+if(dirname(work)!==privateRoot||!work.startsWith(join(privateRoot,'official-office-build-')))throw Error('Preparation directory must be a task-owned official-office-build directory')
+const tools=join(work,'tools'),temporary=join(work,'temporary'),output=join(work,'payload')
+const prepared=existsSync(join(output,'primary-runtime/runtime.json'))&&existsSync(join(output,'office-skills/office/SKILL.md'))
+if(!prepared&&(existsSync(join(output,'primary-runtime'))||existsSync(join(output,'office-skills'))))throw Error('Refusing to replace incomplete generated Office payloads')
+mkdirSync(tools,{recursive:true});mkdirSync(temporary,{recursive:true})
+// Every upstream staging directory, pip/venv smoke and cleanup stays inside this run.
+process.env.TMP=temporary;process.env.TEMP=temporary;process.env.TMPDIR=temporary
+process.env.PYTHONDONTWRITEBYTECODE='1'
+if(!existsSync(join(tools,'package.json'))){
+  writeFileSync(join(tools,'package.json'),JSON.stringify({private:true,packageManager:'yarn@4.18.0',dependencies:{'extract-zip':'2.0.1',papaparse:'5.5.3',tar:'7.5.22'}},null,2))
+  writeFileSync(join(tools,'yarn.lock'),'')
+  writeFileSync(join(tools,'.yarnrc.yml'),'nodeLinker: node-modules\nenableScripts: false\nenableGlobalCache: false\ncacheFolder: ./cache\nglobalFolder: ./global\n')
+}
+const yarn=process.env.npm_execpath&&/yarn[^\\/]*\.(?:js|cjs)$/u.test(process.env.npm_execpath)
+  ?process.env.npm_execpath:join(root,'.corepack-cache/v1/yarn/4.18.0/yarn.js')
+if(!existsSync(yarn))throw Error('Run through the repository Corepack Yarn 4.18.0 release')
+const yarnVersion=spawnSync(process.execPath,[yarn,'--version'],{encoding:'utf8',windowsHide:true})
+if(yarnVersion.status!==0||yarnVersion.stdout.trim()!=='4.18.0')throw Error('Official Office preparation requires the root Yarn 4.18.0 release')
+console.log(`Preparing official ${target} Office environment in ${work}`)
+if(!existsSync(join(tools,'node_modules/papaparse/package.json'))){
+  const installation=spawnSync(process.execPath,[yarn,'install'],{cwd:tools,env:{...process.env,YARN_ENABLE_IMMUTABLE_INSTALLS:'false'},stdio:'inherit',windowsHide:true})
+  if(installation.status!==0)throw Error('Isolated official Office build-tool installation failed')
+}
+// curl uses the existing OS/proxy transport. Keep TLS checks and official
+// SHA-256 pinning; the upstream builder independently verifies these cache bytes.
+const downloads=join(work,'downloads');mkdirSync(downloads,{recursive:true})
+const artifact=lock.targets[target]
+const pythonFile=`cpython-${lock.pythonVersion}+${lock.pythonRelease}-${artifact.pythonTarget}-install_only_stripped.tar.gz`
+const archives=[
+  {url:`https://nodejs.org/dist/v${lock.nodeVersion}/node-v${lock.nodeVersion}-${artifact.nodeArchive}`,sha256:artifact.nodeSha256},
+  {url:`https://github.com/astral-sh/python-build-standalone/releases/download/${lock.pythonRelease}/${encodeURIComponent(pythonFile)}`,sha256:artifact.pythonSha256},
+  ...artifact.wheels,...lock.wheels,
+]
+for(const archive of archives){
+  if(!archive.url.startsWith('https://')||!/^[a-f0-9]{64}$/u.test(archive.sha256))throw Error('Invalid pinned Office download')
+  const cache=join(downloads,archive.sha256)
+  if(existsSync(cache)){
+    if(createHash('sha256').update(readFileSync(cache)).digest('hex')!==archive.sha256)throw Error('Existing Office cache checksum mismatch; preserving it')
+    continue
+  }
+  const download=join(downloads,archive.sha256+'.download-'+randomUUID())
+  console.log(`Downloading verified Office input: ${new URL(archive.url).pathname.split('/').at(-1)}`)
+  const proxy=(process.env.HTTPS_PROXY||process.env.https_proxy)?['--noproxy','']:[]
+  const fetched=spawnSync(process.platform==='win32'?'curl.exe':'curl',['--fail','--location','--silent','--show-error','--retry','2','--retry-all-errors','--connect-timeout','20','--max-time','180',...proxy,'--output',download,archive.url],{windowsHide:true,stdio:'inherit'})
+  if(fetched.status!==0)throw Error('Official Office archive download failed; partial bytes are preserved')
+  if(createHash('sha256').update(readFileSync(download)).digest('hex')!==archive.sha256)throw Error('Official Office archive checksum mismatch')
+  renameSync(download,cache)
+}
+const toolsRequire=createRequire(join(tools,'package.json'))
+const upstream=join(root,'deepseek-harness/scripts/primary-runtime')
+// The read-only upstream workspace is not installed or edited. Its build script
+// resolves helper packages from this fresh tools project and official installed DSH packages.
+const hook=registerHooks({resolve(specifier,context,next){
+  if(context.parentURL?.startsWith(pathToFileURL(upstream+sep).href)&&!specifier.startsWith('.')&&!specifier.startsWith('node:')){
+    const resolver=['extract-zip','papaparse','tar'].includes(specifier)?toolsRequire:desktopRequire
+    return {url:pathToFileURL(resolver.resolve(specifier)).href,shortCircuit:true}
+  }
+  return next(specifier,context)
+}})
+try{
+  const {preparePrimaryRuntime,smokePrimaryRuntime}=await import(pathToFileURL(join(upstream,'prepare.ts')).href)
+  const skillSource=join(dirname(desktopRequire.resolve('@deepseek-ai/dsh-skill-office/package.json')),'assets')
+  if(!prepared)await preparePrimaryRuntime({target,output,cache:join(work,'downloads'),version,skillSource})
+  const smoke=mkdtempSync(join(work,'smoke-'))
+  const payload=JSON.parse(readFileSync(join(output,'primary-runtime/runtime.json'),'utf8'))
+  writeFileSync(join(smoke,'package.json'),JSON.stringify({private:true,packageManager:`pnpm@${payload.pnpm}`}))
+  // pnpm's --version checks the nearest package manager. The verification is
+  // not a pnpm operation on this Yarn repository: keep its cwd in our new fixture.
+  const before=process.cwd()
+  try{process.chdir(smoke);smokePrimaryRuntime(join(output,'primary-runtime'))}
+  finally{process.chdir(before)}
+}finally{hook.deregister()}
+
+const manifest=JSON.parse(readFileSync(join(output,'primary-runtime/runtime.json'),'utf8'))
+if(!/^[a-f0-9]{64}$/u.test(manifest.payloadDigest))throw Error('Missing official payload digest')
+for(const name of publishBoth?['dsh-plugin-desktop-beta','dsh-plugin-desktop']:[edition]){
+  const directory=join(root,name,'build/official-office')
+  if(existsSync(join(directory,'current.json')))throw Error(`Refusing to replace existing Office snapshot: ${directory}`)
+  mkdirSync(directory,{recursive:true})
+  const snapshot=join(directory,manifest.payloadDigest)
+  if(existsSync(snapshot))throw Error(`Refusing to overwrite existing snapshot: ${snapshot}`)
+  cpSync(output,snapshot,{recursive:true,dereference:true,force:false,errorOnExist:true})
+  writeFileSync(join(directory,'current.json'),JSON.stringify({schema:1,directory:manifest.payloadDigest,inputs,coreVersion:'0.2.1-rc.2'},null,2))
+  console.log(`Official Office ready: ${directory}`)
+}
+console.log(`Preparation evidence and verified downloads retained: ${work}`)

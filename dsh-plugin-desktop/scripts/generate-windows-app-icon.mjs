@@ -35,7 +35,7 @@ const outputPath = join(packageRoot, 'build', 'app-icon.ico')
 
 /**
  * Reuse the repository's tray mark for frames where the full shaded artwork
- * loses recognizable detail. The flat dark-on-light treatment preserves the
+ * loses recognizable detail. The flat brand-blue-on-light treatment preserves the
  * LETSDSH geometric silhouette at native Windows chrome sizes.
  * @returns {Promise<Buffer>} Self-contained SVG for small Windows frames.
  */
@@ -46,7 +46,7 @@ async function loadSmallFrameArtwork() {
   }
   const mark = await sharp(Buffer.from(source))
     .resize({ width: 40, height: 40, fit: 'contain' })
-    .tint('#000000')
+    .tint('#008CD6')
     .png({ compressionLevel: 9 })
     .toBuffer()
   return Buffer.from(

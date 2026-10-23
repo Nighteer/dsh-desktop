@@ -6,14 +6,63 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
-import { withoutForwardedDesktopPnpmPolicy } from './pnpm-policy.ts'
+import { withDesktopPnpmPolicy, withoutForwardedDesktopPnpmPolicy } from './pnpm-policy.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
+import { installDesktopPnpmRuntime } from './desktop-runtime-environment.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const DEFAULT_PROFILE = 'DSH_DESKTOP_DEFAULT_PROFILE'
 const DSH_ENTRY_URL = pathToFileURL(
   packagedDependencyPath(import.meta.url, '@deepseek-ai/dsh/lib/bin.js'),
 ).href
+
+interface DesktopCliOptions {
+  manageDesktopProfile: boolean
+  packageManager?: { command: string; args: string[]; env: Record<string, string> }
+}
+
+/** Windows must not dispatch native plugin operations through a deep PATH .cmd. */
+export function desktopCliOptions(platform: NodeJS.Platform = process.platform): DesktopCliOptions {
+  if (platform !== 'win32') return { manageDesktopProfile: true }
+  return {
+    manageDesktopProfile: true,
+    packageManager: {
+      command: process.execPath,
+      args: [packagedDependencyPath(import.meta.url, 'pnpm/bin/pnpm.mjs'), ...withDesktopPnpmPolicy([])],
+      // Only the package-manager child needs Node mode. Do not copy account or
+      // provider credentials into the descriptor, or alter CLI process identity.
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    },
+  }
+}
+
+/** A terminal's `dsh plugin` does not inherit the service's private Node PATH. */
+function prepareWindowsPackageManager(options: DesktopCliOptions, environment: NodeJS.ProcessEnv): void {
+  const target = process.versions.electron
+  if (options.packageManager === undefined || target === undefined) return
+  const path = Object.entries(environment).find(([name]) => name.toUpperCase() === 'PATH')?.[1] ?? ''
+  let node = environment.NODE
+  let childPath = path
+  if (node === undefined) {
+    const childEnvironment = { PATH: path }
+    const runtime = installDesktopPnpmRuntime({
+      platform: 'win32', appExecutable: process.execPath,
+      pnpmBinPath: options.packageManager.args[0]!, electronVersion: target,
+      stateDir: join(resolveDshHome(undefined, environment), 'desktop-cli-runtime'),
+      environment: childEnvironment,
+    })
+    node = runtime.nodeShimPath
+    childPath = `${runtime.nodeBinDir};${childEnvironment.PATH}`
+    // Published files are immutable and retained for the package-manager child.
+    // Only the isolated environment copy was changed; restore that PATH owner.
+    runtime.dispose()
+  }
+  Object.assign(options.packageManager.env, {
+    NODE: node, PATH: childPath,
+    npm_config_runtime: 'electron', npm_config_target: target,
+    npm_config_disturl: 'https://electronjs.org/headers',
+  })
+}
 
 export function clearElectronRunAsNode(environment: NodeJS.ProcessEnv): void {
   for (const key of Object.keys(environment)) {
@@ -86,7 +135,7 @@ export function desktopCliProfileManifestUrl(
  */
 export async function runDesktopDshCli(
   environment: NodeJS.ProcessEnv = process.env,
-  load: (url: string) => Promise<{ runCli(options: { allowDesktopProfile: boolean }): Promise<void> }> = url => import(url),
+  load: (url: string) => Promise<{ runCli(options: DesktopCliOptions): Promise<void> }> = url => import(url),
   argv: string[] = process.argv,
 ): Promise<void> {
   const profileName = takeDefaultProfile(environment)
@@ -96,6 +145,10 @@ export async function runDesktopDshCli(
     : withDefaultDesktopProfile(argv.slice(2), profileName)
   argv.splice(2, argv.length - 2, ...withoutForwardedDesktopPnpmPolicy(selected))
   const selectedProfile = selectedDesktopCliProfile(argv.slice(2))
+  const options = desktopCliOptions()
+  if (argv[2] === 'plugin' && !argv.slice(3).some(argument => argument === '--help' || argument === '-h')) {
+    prepareWindowsPackageManager(options, environment)
+  }
   const releaseResolver = selectedProfile !== undefined
     && /([\\/])app\.asar\1/u.test(fileURLToPath(DSH_ENTRY_URL))
     ? installProfilePackageResolver(desktopCliProfileManifestUrl(selectedProfile, environment))
@@ -105,13 +158,13 @@ export async function runDesktopDshCli(
   // Keep it until process exit rather than treating CLI settlement as app
   // shutdown. A packaged CLI process owns exactly one Profile invocation.
   if (releaseResolver === undefined) {
-    await (await load(DSH_ENTRY_URL)).runCli({ allowDesktopProfile: true })
+    await (await load(DSH_ENTRY_URL)).runCli(options)
     return
   }
   const releaseAtExit = (): void => { releaseResolver() }
   process.once('exit', releaseAtExit)
   try {
-    await (await load(DSH_ENTRY_URL)).runCli({ allowDesktopProfile: true })
+    await (await load(DSH_ENTRY_URL)).runCli(options)
   } catch (cause) {
     process.off('exit', releaseAtExit)
     releaseResolver()

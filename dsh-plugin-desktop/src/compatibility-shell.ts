@@ -5,6 +5,7 @@ import type { DesktopRendererActionHandlers } from './renderer-actions-dispatch.
 import type { DesktopLocale, DesktopPlatform, DesktopShellSpec } from './runtime.ts'
 import { DESKTOP_FRAME_HEIGHT } from './window-chrome.ts'
 import { DESKTOP_RENDERER_SESSION_PARTITION } from './window-options.ts'
+import { NATIVE_ORIGIN_ARGUMENT } from './native-capabilities-contract.ts'
 
 export interface CompatibilityShellActions extends DesktopRendererActionHandlers {
   locale(): DesktopLocale
@@ -40,6 +41,8 @@ export class CompatibilityShell {
     this.content = new WebContentsView({ webPreferences: {
       preload,
       partition: DESKTOP_RENDERER_SESSION_PARTITION,
+      webviewTag: true,
+      additionalArguments: [NATIVE_ORIGIN_ARGUMENT + new URL(spec.url).origin],
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

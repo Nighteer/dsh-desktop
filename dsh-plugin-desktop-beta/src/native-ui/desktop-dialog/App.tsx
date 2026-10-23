@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { Button } from '../components/ui/button.tsx'
 import { ScrollArea } from '../components/ui/scroll-area.tsx'
 import { DesktopFrame } from '../shared/DesktopFrame.tsx'
+import { LETS_BRAND_IMAGE_DATA_URL } from '../../client/lets-brand-data.ts'
 
 const SCHEME = 'dsh-desktop-dialog:'
 
@@ -15,7 +16,7 @@ interface DesktopDialogState {
   readonly buttons: readonly string[]
   readonly defaultId: number
   readonly cancelId: number
-  readonly presentation?: 'default' | 'diagnostic' | 'profile-compatibility'
+  readonly presentation?: 'default' | 'diagnostic' | 'profile-compatibility' | 'product-info'
 }
 
 function decodeState(): DesktopDialogState | undefined {
@@ -39,14 +40,26 @@ function respond(response: number): void {
 }
 
 export function desktopDialogShowsToneIcon(presentation: DesktopDialogState['presentation']): boolean {
-  return presentation !== 'profile-compatibility'
+  return presentation !== 'profile-compatibility' && presentation !== 'product-info'
 }
 
 export function desktopDialogButtonClassName(
   presentation: DesktopDialogState['presentation'],
   index: number,
+  defaultId?: number,
 ): string | undefined {
+  if (presentation === 'product-info' && index === defaultId) {
+    return 'bg-[#3e76ad] text-white hover:bg-[#356697] focus-visible:ring-[#3e76ad]/40'
+  }
   return presentation === 'profile-compatibility' && index === 0 ? 'mr-auto' : undefined
+}
+
+/** Shared identity for About and update notices, independent of the OS message box. */
+export function DesktopProductDialogBrand(): JSX.Element {
+  return <div className="mb-5 flex items-center gap-3 border-b pb-4">
+    <img alt="" aria-hidden="true" className="size-9 object-contain" src={LETS_BRAND_IMAGE_DATA_URL} />
+    <span className="text-base font-semibold tracking-tight">LETS Desktop</span>
+  </div>
 }
 
 export function desktopDialogAdvisoryLines(advisory: string): readonly string[] {
@@ -79,18 +92,22 @@ export function DesktopDialogApp(): JSX.Element {
   if (state === undefined) return <><DesktopFrame /><main className="dshNativeContent flex items-center justify-center p-5"><p className="text-sm text-destructive">Desktop dialog state is unavailable.</p></main></>
   const diagnostic = state.presentation === 'diagnostic'
   const profileCompatibility = state.presentation === 'profile-compatibility'
+  const productInfo = state.presentation === 'product-info'
   const showToneIcon = desktopDialogShowsToneIcon(state.presentation)
   const describedBy = [
     ...(state.detail === undefined ? [] : ['desktop-dialog-detail']),
     ...(state.advisory === undefined ? [] : ['desktop-dialog-advisory']),
   ].join(' ') || undefined
   return <><DesktopFrame /><main className="dshNativeContent flex flex-col p-5">
+    {productInfo ? <DesktopProductDialogBrand /> : null}
     <section className="flex gap-4" role="dialog" aria-labelledby="desktop-dialog-title" aria-describedby={describedBy}>
       {showToneIcon ? <div className="mt-0.5 shrink-0"><DesktopDialogToneIcon type={state.type} /></div> : null}
       <div className="min-w-0 flex-1">
         <h1 className="text-base font-semibold leading-tight" id="desktop-dialog-title">{state.message}</h1>
         {state.detail === undefined
           ? null
+          : productInfo
+            ? <div className="mt-2 max-h-64 overflow-y-auto overscroll-contain pr-2" tabIndex={0}><p className="select-text whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground" id="desktop-dialog-detail">{state.detail}</p></div>
           : profileCompatibility
             ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground" id="desktop-dialog-detail">{state.detail}</p>
           : diagnostic
@@ -106,7 +123,7 @@ export function DesktopDialogApp(): JSX.Element {
       </div>
     </section>
     <footer className="mt-5 flex shrink-0 flex-wrap justify-end gap-2">
-      {state.buttons.map((label, index) => <Button autoFocus={index === state.defaultId} className={desktopDialogButtonClassName(state.presentation, index)} key={`${String(index)}:${label}`} onClick={() => { respond(index) }} type="button" variant={index === state.defaultId ? 'default' : index === state.cancelId ? 'outline' : 'secondary'}>{label}</Button>)}
+      {state.buttons.map((label, index) => <Button autoFocus={index === state.defaultId} className={desktopDialogButtonClassName(state.presentation, index, state.defaultId)} key={`${String(index)}:${label}`} onClick={() => { respond(index) }} type="button" variant={index === state.defaultId ? 'default' : index === state.cancelId ? 'outline' : 'secondary'}>{label}</Button>)}
     </footer>
   </main></>
 }

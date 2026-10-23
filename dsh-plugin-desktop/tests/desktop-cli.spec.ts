@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
   clearElectronRunAsNode,
+  desktopCliOptions,
   desktopCliProfileManifestUrl,
   runDesktopDshCli,
   selectedDesktopCliProfile,
@@ -50,7 +51,18 @@ describe('packaged dsh bootstrap', () => {
 
     expect(load).toHaveBeenCalledOnce()
     expect(runCli).toHaveBeenCalledOnce()
-    expect(runCli).toHaveBeenCalledWith({ allowDesktopProfile: true })
+    expect(runCli).toHaveBeenCalledWith(desktopCliOptions())
+  })
+
+  it('bypasses PATH batch dispatch with the packaged Windows pnpm descriptor', () => {
+    const options = desktopCliOptions('win32')
+    expect(options.packageManager).toEqual({
+      command: process.execPath,
+      args: [packagedDependencyPath(import.meta.url, 'pnpm/bin/pnpm.mjs'), '--config.minimumReleaseAge=0'],
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    })
+    expect(desktopCliOptions('linux')).toEqual({ manageDesktopProfile: true })
+    expect(desktopCliOptions('darwin')).toEqual({ manageDesktopProfile: true })
   })
 
   it('propagates a rejected upstream CLI invocation', async () => {
@@ -59,7 +71,7 @@ describe('packaged dsh bootstrap', () => {
     await expect(runDesktopDshCli({}, load, ['node', 'desktop-cli', '--version'])).rejects.toBe(failure)
   })
 
-  it('leaves the release-age policy to the final pnpm shim exactly once', async () => {
+  it('leaves the release-age policy to the final pnpm boundary exactly once', async () => {
     const load = vi.fn(async () => ({ runCli: async () => {} }))
     const defaulted = [
       '/Applications/DSH Desktop',
@@ -180,7 +192,7 @@ describe('packaged dsh bootstrap', () => {
 
   it('resolves the DSH entry from a pnpm profile with flat package dependencies', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-flat-profile-'))
-    const desktopLib = join(root, 'node_modules', 'dsh-plugin-desktop', 'lib')
+    const desktopLib = join(root, 'node_modules', 'dsh-plugin-desktop-beta', 'lib')
     const dshPackage = join(root, 'node_modules', '@deepseek-ai', 'dsh')
     const dshEntry = join(dshPackage, 'lib', 'bin.js')
     const pnpmPackage = join(root, 'node_modules', 'pnpm')

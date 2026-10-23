@@ -12,7 +12,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   root: uiRoot,
   base: './',
-  resolve: { alias: { '@': resolve(root, 'src/native-ui') } },
+  resolve: {
+    alias: { '@': resolve(root, 'src/native-ui') },
+    // Shared enterprise components must use the renderer's React dispatcher.
+    dedupe: ['react', 'react-dom'],
+  },
   build: {
     outDir: resolve(root, 'lib/native-ui'),
     emptyOutDir: false,
@@ -25,6 +29,8 @@ export default defineConfig({
         'profile-create': resolve(uiRoot, 'profile-create.html'),
         'profile-selector': resolve(uiRoot, 'profile-selector.html'),
         'setup-wizard': resolve(uiRoot, 'setup-wizard.html'),
+        'enterprise-login': resolve(uiRoot, 'enterprise-login.html'),
+        'enterprise-applications': resolve(uiRoot, 'enterprise-applications.html'),
       },
     },
   },

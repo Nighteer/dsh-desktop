@@ -20,6 +20,7 @@ export type DesktopRendererAction =
   | 'developer'
   | 'diagnostics'
   | 'check-for-updates'
+  | 'application-menu'
 
 /** Capability exposed by the context-isolated preload to the Desktop page. */
 export interface DesktopRendererActionsBridge {
