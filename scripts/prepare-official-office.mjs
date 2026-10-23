@@ -5,6 +5,7 @@ import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,renameSync,writeFil
 import {createRequire,registerHooks} from 'node:module'
 import {dirname,join,resolve,sep} from 'node:path'
 import {fileURLToPath,pathToFileURL} from 'node:url'
+import {officeDependencyResolver} from './office-dependency-resolution.mjs'
 
 const root=resolve(import.meta.dirname,'..')
 const edition=process.argv.includes('--stable')?'dsh-plugin-desktop':'dsh-plugin-desktop-beta'
@@ -99,17 +100,10 @@ for(const archive of archives){
   if(createHash('sha256').update(readFileSync(download)).digest('hex')!==archive.sha256)throw Error('Official Office archive checksum mismatch')
   renameSync(download,cache)
 }
-const toolsRequire=createRequire(join(tools,'package.json'))
 const upstream=join(root,'deepseek-harness/scripts/primary-runtime')
 // The read-only upstream workspace is not installed or edited. Its build script
 // resolves helper packages from this fresh tools project and official installed DSH packages.
-const hook=registerHooks({resolve(specifier,context,next){
-  if(context.parentURL?.startsWith(pathToFileURL(upstream+sep).href)&&!specifier.startsWith('.')&&!specifier.startsWith('node:')){
-    const resolver=['extract-zip','papaparse','tar'].includes(specifier)?toolsRequire:desktopRequire
-    return {url:pathToFileURL(resolver.resolve(specifier)).href,shortCircuit:true}
-  }
-  return next(specifier,context)
-}})
+const hook=registerHooks({resolve:officeDependencyResolver({upstream,tools,desktopManifest:join(root,edition,'package.json')})})
 try{
   const {preparePrimaryRuntime,smokePrimaryRuntime}=await import(pathToFileURL(join(upstream,'prepare.ts')).href)
   const skillSource=join(dirname(desktopRequire.resolve('@deepseek-ai/dsh-skill-office/package.json')),'assets')
