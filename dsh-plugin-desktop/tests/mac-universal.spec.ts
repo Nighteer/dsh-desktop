@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,14 @@ import {
 } from '../scripts/mac-universal.ts'
 
 describe('universal macOS native runtime preparation', () => {
+  it.skipIf(process.platform !== 'darwin')('tracks the installed Sharp and libvips files for both CPUs', () => {
+    const desktopRoot = fileURLToPath(new URL('..', import.meta.url))
+    for (const entry of MACOS_UNIVERSAL_NATIVE_ENTRIES.filter(entry => entry.path.startsWith('node_modules/@img/'))) {
+      const path = join(desktopRoot, entry.path)
+      expect(existsSync(path), `missing installed native file: ${path}`).toBe(true)
+    }
+  })
+
   // fs-ext is the only universal entry whose filename moves with the Electron ABI. Spelling
   // that number out made this spec the last thing standing between an ABI bump and a green
   // `check` job, and it lost: bumping Electron turned a previously green job red instead of

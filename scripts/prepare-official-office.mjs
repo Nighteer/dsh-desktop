@@ -95,7 +95,7 @@ for(const archive of archives){
   if(!archive.url.startsWith('https://')||!(algorithm==='sha512'?/^[a-f0-9]{128}$/u:/^[a-f0-9]{64}$/u).test(archive.sha256))throw Error('Invalid pinned Office download')
   const cache=join(downloads,archive.sha256)
   if(existsSync(cache)){
-    if(createHash('sha256').update(readFileSync(cache)).digest('hex')!==archive.sha256)throw Error('Existing Office cache checksum mismatch; preserving it')
+    if(createHash(algorithm).update(readFileSync(cache)).digest('hex')!==archive.sha256)throw Error('Existing Office cache checksum mismatch; preserving it')
     continue
   }
   const download=join(downloads,archive.sha256+'.download-'+randomUUID())
