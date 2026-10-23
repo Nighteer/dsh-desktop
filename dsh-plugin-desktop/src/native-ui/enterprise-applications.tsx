@@ -2,8 +2,8 @@ import {useEffect,useRef,useState} from 'react'
 import {createRoot} from 'react-dom/client'
 import type {AvailableApplication,ApplicationIcon} from 'dsh-enterprise-contracts'
 import type {EnterpriseApplicationsBridge} from '../enterprise-applications-contract.ts'
-import 'dsh-enterprise-admin/style'
-import 'dsh-enterprise-admin/admin-style'
+import 'dsh-enterprise-ui/style'
+import 'dsh-enterprise-ui/admin-style'
 import './enterprise-applications.css'
 declare global{interface Window{letsEnterpriseApplications:EnterpriseApplicationsBridge}}
 

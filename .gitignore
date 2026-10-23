@@ -46,3 +46,5 @@ dsh-plugin-desktop/build/office-runtime-previous-*/
 # Official upstream Office payload snapshots, prepared explicitly and kept separate.
 dsh-plugin-desktop/build/official-office/
 dsh-plugin-desktop-beta/build/official-office/
+
+local-development.json

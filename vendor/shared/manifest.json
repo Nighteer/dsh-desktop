@@ -1,0 +1,14 @@
+[
+  {
+    "name": "dsh-enterprise-contracts",
+    "version": "0.1.0-split.2",
+    "file": "dsh-enterprise-contracts-0.1.0-split.2.tgz",
+    "sha256": "a904ed080597db0f415a0dd0d69840540128409ab3937653f17f7bb74d001f14"
+  },
+  {
+    "name": "dsh-enterprise-ui",
+    "version": "0.1.0-split.2",
+    "file": "dsh-enterprise-ui-0.1.0-split.2.tgz",
+    "sha256": "04ad4b2b38fe1eb89cd2c3866031977cd457b8edf148e1fb016950cda8e9e8a8"
+  }
+]

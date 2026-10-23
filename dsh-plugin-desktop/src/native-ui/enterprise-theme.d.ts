@@ -1,1 +1,1 @@
-declare module 'dsh-enterprise-admin/admin-style'
+declare module 'dsh-enterprise-ui/admin-style'

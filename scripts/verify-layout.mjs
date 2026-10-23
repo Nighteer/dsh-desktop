@@ -18,8 +18,7 @@ const betaPlugin = readJson('dsh-plugin-desktop-beta/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
 const market = readJson('dsh-community-market/package.json')
 const ppt = readJson('dsh-ppt-runtime/package.json')
-const enterprisePackages = ['dsh-enterprise-contracts', 'dsh-enterprise-server', 'dsh-enterprise-admin']
-  .map(name => [name, readJson(`${name}/package.json`)])
+const enterprisePackages = []
 const upstreamPackage = readJson('deepseek-harness/package.json')
 
 if (stablePlugin.name !== 'dsh-plugin-desktop') fail('the stable Desktop workspace must retain dsh-plugin-desktop')
@@ -36,9 +35,6 @@ if (JSON.stringify(workspace.workspaces) !== JSON.stringify([
   'dsh-plugin-desktop-beta',
   'dsh-community-fabric',
   'dsh-community-market',
-  'dsh-enterprise-contracts',
-  'dsh-enterprise-server',
-  'dsh-enterprise-admin',
   'dsh-ppt-runtime',
 ])) {
   fail('the root Yarn workspace must contain the declared desktop, community, enterprise, and PPT packages')

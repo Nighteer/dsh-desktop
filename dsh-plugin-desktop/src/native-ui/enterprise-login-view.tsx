@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react'
-import {AdminLogin as LoginView} from 'dsh-enterprise-admin/admin-login'
-import {EnterpriseConnection} from 'dsh-enterprise-admin/enterprise-connection'
+import {AdminLogin as LoginView} from 'dsh-enterprise-ui/admin-login'
+import {EnterpriseConnection} from 'dsh-enterprise-ui/enterprise-connection'
 import type {EnterpriseLoginAction,EnterpriseLoginBridge,EnterpriseLoginState} from '../enterprise-login-contract.ts'
 
 export function EnterpriseLoginApp({bridge}:{bridge:EnterpriseLoginBridge}){

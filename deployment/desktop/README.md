@@ -45,7 +45,9 @@ corepack yarn enterprise:release:candidate --allow-http-origin http://10.10.0.5
 
 如完整单元检查尚未通过，只能显式使用 `--candidate --acceptance-only` 构建隔离测试包；该路径仍执行类型检查、企业连接/更新/安装器专项测试及打包验证 Hook，并记录 `validationScope=targeted-enterprise-installer-tests`。它禁止用于正式发布，不代表完整测试通过。无论是否签名，产物清单的 `readyForProduction` 均保持 false，直到团队另行完成完整 gate、干净电脑安装升级及业务验收。
 
-本机曾出现依赖文件损坏。可用 `node scripts/rehydrate-release-dependency.mjs <包名> <Yarn缓存zip路径>`，按根锁文件 SHA-512 校验并提取到全新目录；它不会删除或覆盖原依赖。仅候选构建可通过 `DSH_RELEASE_DEPENDENCY_OVERLAYS` 指向生成的 overlays.json，正式构建必须使用经过检查的完整依赖目录。候选包使用 ZIP 载荷加快验收构建，正式 NSIS 包保留原压缩配置。
+本机曾出现依赖文件损坏。可用 `node scripts/rehydrate-release-dependency.mjs <包名> <Yarn缓存zip路径>`，按根锁文件 SHA-512 校验并提取到全新目录；它不会删除或覆盖原依赖。仅候选构建可通过 `DSH_RELEASE_DEPENDENCY_OVERLAYS` 指向生成的 overlays.json，正式构建必须使用经过检查的完整依赖目录。
+
+Windows 候选包和正式包均使用 7z 载荷，禁止切换到当前有兼容问题的 nsisunz ZIP 解压插件。发布入口会从最终 EXE 提取真实载荷，调用实际 NSIS 解压插件解压到全新中文长路径目录，并逐文件校验包括 node_modules 在内的全部内容。此步骤不注册程序、不创建快捷方式，也不替代干净系统上的完整安装验收。
 
 需要另外在干净 Windows/Mac 上完成：首次安装、用户填写地址、HTTP 显式允许、HTTPS 信任、企业登录、角色权限、模型与知识库、Office/PPT、插件、退出任务保护，以及真实旧版到新版的升级和用户数据保留。构建通过不能替代这些验收。
 

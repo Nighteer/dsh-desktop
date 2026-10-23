@@ -5,13 +5,19 @@ import { basename, join, resolve } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { ensureEnterpriseElectron } from './enterprise-electron.mjs'
-import { hashFile, filesAt, run } from './package-enterprise-server.mjs'
-import { explicitHttpOrigins } from '../dsh-enterprise-contracts/src/enterprise-origin.ts'
-import { MAX_DESKTOP_INSTALLER_BYTES } from '../dsh-enterprise-contracts/src/desktop-releases.ts'
+import { verifyInstallerExtraction } from './verify-windows-installer-extraction.mjs'
+import { hashFile, filesAt, run } from './release-utils.mjs'
+import { explicitHttpOrigins } from 'dsh-enterprise-contracts/enterprise-origin'
+import { MAX_DESKTOP_INSTALLER_BYTES } from 'dsh-enterprise-contracts/desktop-releases'
 
 const root = resolve(import.meta.dirname, '..')
 export function cleanBuildEnvironment(env) {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !/^(?:APPLE_|CSC_|WIN_CSC_|WIN_CERTIFICATE_|WIN_PUBLISHER_|MAC_CERT_|MACOS_SIGN_)/iu.test(key)))
+}
+export function windowsInstallerOptions(build) {
+  // Use the same NSIS 7z decoder for candidates and signed releases. The bundled
+  // nsisunz ZIP plugin fails to open our payload; a valid ZIP/PE is not enough.
+  return { ...build.nsis, shortcutName: build.productName, useZip: false, differentialPackage: false }
 }
 export function releasePlan(argv, env = process.env, platform = process.platform, arch = process.arch) {
   const flagArgs = [...argv], allowedHttpOrigins = []
@@ -101,7 +107,7 @@ export async function releaseDesktop(argv = process.argv.slice(2)) {
     afterPack: join(root, 'scripts/enterprise-after-pack.mjs'),
     forceCodeSigning: !plan.candidate,
     extraMetadata: { dshEnterprise: true, author: { name: process.env.LETS_COMPANY_NAME?.trim() || 'LETS' }, ...(plan.allowedHttpOrigins.length ? { dshEnterpriseHttpOrigins: plan.allowedHttpOrigins } : {}), version },
-    nsis: { ...plan.manifest.build.nsis, shortcutName: plan.manifest.build.productName, ...(plan.candidate ? { useZip: true } : {}) },
+    nsis: windowsInstallerOptions(plan.manifest.build),
     win: { ...plan.manifest.build.win, signExecutable: !plan.candidate,
       ...(!plan.candidate && process.env.WIN_CERTIFICATE_SHA1 ? { signtoolOptions: { certificateSha1: process.env.WIN_CERTIFICATE_SHA1 } } : {}),
       ...(!plan.candidate && process.env.WIN_PUBLISHER_NAME ? { publisherName: process.env.WIN_PUBLISHER_NAME } : {}) },
@@ -116,9 +122,11 @@ export async function releaseDesktop(argv = process.argv.slice(2)) {
   if (installers.length !== 1) throw new Error('Expected exactly one installer for the selected platform/architecture')
   for (const name of installers) {
     const installer = join(output, name)
+    let extractionReport = null
     if (statSync(installer).size > MAX_DESKTOP_INSTALLER_BYTES) throw new Error('Installer exceeds the enterprise server upload limit; preserve this output and review the runtime payload before release')
     if (plan.platform === 'win32') {
       verifyPE(installer)
+      extractionReport = await verifyInstallerExtraction(installer, join(output, plan.arch === 'arm64' ? 'win-arm64-unpacked' : 'win-unpacked'))
       if (!plan.candidate) for (const target of [installer, join(output, plan.arch === 'arm64' ? 'win-arm64-unpacked' : 'win-unpacked', `${plan.manifest.build.productName}.exe`)]) {
         run('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', join(root, 'deployment/desktop/verify-signature.ps1'), target], cwd, buildEnv)
       }
@@ -130,7 +138,7 @@ export async function releaseDesktop(argv = process.argv.slice(2)) {
     }
     const sha256 = hashFile(installer)
     writeFileSync(installer + '.sha256', `${sha256}  ${name}\n`, { flag: 'wx' })
-    writeFileSync(join(output, 'release-manifest.json'), JSON.stringify({ product: plan.manifest.build.productName, version, channel: plan.candidate || plan.name.endsWith('-beta') ? 'beta' : 'stable', platform: plan.platform, arch: plan.arch, candidate: plan.candidate, readyForProduction: false, signed: !plan.candidate, licenseCheckPassed: licenseCheck.status === 0, validationScope: plan.acceptanceOnly ? 'targeted-enterprise-installer-tests' : 'package-typecheck-and-unit-suite', dependencyRecovery: overlays.map(({ name, archiveSha512 }) => ({ name, archiveSha512 })), manualAcceptanceRequired: true, server: plan.url ?? null, file: name, size: statSync(installer).size, sha256, sourceCommit: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout?.trim() || null }, null, 2) + '\n', { flag: 'wx' })
+    writeFileSync(join(output, 'release-manifest.json'), JSON.stringify({ product: plan.manifest.build.productName, version, channel: plan.candidate || plan.name.endsWith('-beta') ? 'beta' : 'stable', platform: plan.platform, arch: plan.arch, candidate: plan.candidate, readyForProduction: false, signed: !plan.candidate, licenseCheckPassed: licenseCheck.status === 0, validationScope: plan.acceptanceOnly ? 'targeted-enterprise-installer-tests' : 'package-typecheck-and-unit-suite', dependencyRecovery: overlays.map(({ name, archiveSha512 }) => ({ name, archiveSha512 })), manualAcceptanceRequired: true, server: plan.url ?? null, installerPayload: plan.platform === 'win32' ? '7z' : null, extractionReport, file: name, size: statSync(installer).size, sha256, sourceCommit: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout?.trim() || null }, null, 2) + '\n', { flag: 'wx' })
     console.log(`Installer: ${installer}`)
   }
   return output

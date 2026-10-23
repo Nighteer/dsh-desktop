@@ -1,5 +1,5 @@
 {
-  "name": "deepseek-harness-desktop",
+  "name": "lets-desktop",
   "private": true,
   "description": "DSH Desktop product workspace",
   "license": "MIT",
@@ -12,9 +12,6 @@
     "dsh-plugin-desktop-beta",
     "dsh-community-fabric",
     "dsh-community-market",
-    "dsh-enterprise-contracts",
-    "dsh-enterprise-server",
-    "dsh-enterprise-admin",
     "dsh-ppt-runtime"
   ],
   "resolutions": {
@@ -1862,24 +1859,14 @@
     }
   },
   "scripts": {
-    "enterprise:db": "node scripts/enterprise-db.mjs",
-    "enterprise:migrate": "yarn workspace dsh-enterprise-server migrate",
-    "enterprise:init-admin": "yarn workspace dsh-enterprise-server init-admin",
-    "enterprise:server": "yarn workspace dsh-enterprise-server dev",
-    "enterprise:admin": "yarn workspace dsh-enterprise-admin dev",
     "enterprise:desktop": "node scripts/enterprise-desktop.mjs --beta",
     "enterprise:desktop:stable": "node scripts/enterprise-desktop.mjs",
     "enterprise:package": "node scripts/enterprise-desktop.mjs --beta --package",
-    "enterprise:package:server": "node scripts/package-enterprise-server.mjs",
     "enterprise:release:desktop": "node scripts/release-enterprise-desktop.mjs",
     "enterprise:release:candidate": "node scripts/release-enterprise-desktop.mjs --candidate",
-    "enterprise:test:release": "node --test scripts/enterprise-release.test.mjs",
-    "enterprise:test:isolated": "node scripts/test-enterprise-isolated-db.mjs",
-    "enterprise:test:deployment": "node scripts/test-enterprise-deployment.mjs",
-    "enterprise:check": "yarn workspace dsh-enterprise-contracts typecheck && yarn workspace dsh-enterprise-server typecheck && yarn workspace dsh-enterprise-server test && yarn workspace dsh-enterprise-admin typecheck && yarn workspace dsh-enterprise-admin build",
-    "build": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop build && yarn workspace dsh-plugin-desktop-beta build && yarn workspace dsh-enterprise-admin build",
-    "typecheck": "yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck && yarn enterprise:typecheck",
-    "enterprise:typecheck": "yarn workspace dsh-enterprise-contracts typecheck && yarn workspace dsh-enterprise-server typecheck && yarn workspace dsh-enterprise-admin typecheck",
+    "enterprise:test:release": "node --test scripts/desktop-release.test.mjs",
+    "build": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop build && yarn workspace dsh-plugin-desktop-beta build",
+    "typecheck": "yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-plugin-desktop-beta typecheck && yarn workspace dsh-community-market typecheck",
     "test": "yarn workspace dsh-plugin-desktop test && yarn workspace dsh-plugin-desktop-beta test && yarn workspace dsh-community-market test && yarn test:ppt",
     "ppt:build": "node dsh-ppt-runtime/scripts/build.mjs",
     "test:ppt": "yarn ppt:build && node --test dsh-ppt-runtime/test/*.test.mjs && DSH_PPT_TEST_EDITION=dsh-plugin-desktop node --test dsh-ppt-runtime/test/*.test.mjs",
@@ -1890,7 +1877,7 @@
     "check:vendored-runtime": "node scripts/sync-vendored-runtime.mjs --check --channel stable && node scripts/sync-vendored-runtime.mjs --check --channel beta",
     "check:desktop-variants": "node scripts/verify-desktop-variants.mjs",
     "check:layout": "yarn check:bilingual-docs && yarn check:architecture && yarn check:vendored-runtime && yarn check:desktop-variants && node scripts/verify-layout.mjs",
-    "check": "yarn check:layout && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-plugin-desktop check && yarn workspace dsh-plugin-desktop-beta check && yarn enterprise:check && yarn test:ppt",
+    "check": "yarn check:boundaries && yarn check:layout && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-plugin-desktop check && yarn workspace dsh-plugin-desktop-beta check && yarn test:ppt",
     "dev": "yarn aa:prepare-release && yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dev",
     "start": "yarn workspace dsh-plugin-desktop start",
     "dev:web": "node scripts/dev-web.mjs",
@@ -1915,6 +1902,10 @@
     "dist:win:beta": "yarn aa:prepare-release && yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop-beta dist:win",
     "dist:win-portable:beta": "yarn aa:prepare-release && yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop-beta dist:win-portable",
     "aa:check": "node scripts/prepare-agents-anywhere-release.mjs --check",
-    "aa:prepare-release": "node scripts/prepare-agents-anywhere-release.mjs"
+    "aa:prepare-release": "node scripts/prepare-agents-anywhere-release.mjs",
+    "check:boundaries": "node scripts/check-boundaries.mjs"
+  },
+  "dependencies": {
+    "dsh-enterprise-contracts": "file:vendor/shared/dsh-enterprise-contracts-0.1.0-split.2.tgz"
   }
 }
