@@ -70,6 +70,7 @@ try {
     }))
   }
   const prepared = prepareDesktopProfile('1', home, 'win32', undefined, undefined, undefined, { aaEnabled: aaRequested })
+  console.log(`${BIN_NAME}: profile prepared`)
   if (brokenAa && (!prepared.aaFailure || prepared.aaEnabled)) throw new Error('Broken AA bundle did not fail closed')
   const hostServicePluginDir = join(
     prepared.profile.dir,
@@ -152,6 +153,7 @@ try {
     async requestRestart() {},
     prepareToQuit() {},
   }
+  console.log(`${BIN_NAME}: booting profile`)
   ctx = await boot(
     BIN_NAME,
     prepared.rootConfig,
@@ -199,6 +201,7 @@ try {
     prepared.bareModuleBaseUrl,
   )
   await runtime.mountScheduled()
+  console.log(`${BIN_NAME}: desktop shell registered`)
 
   if (ctx.get('desktopPnpm') === undefined) {
     throw new Error('assembled desktop profile is missing the desktop pnpm Host capability')
@@ -302,7 +305,9 @@ try {
     redirect: 'manual',
   })
   await exchange.body?.cancel()
-  if (exchange.status !== 303 || exchange.headers.get('location') !== '/') {
+  const location = exchange.headers.get('location')
+  const redirect = location === null ? undefined : new URL(location, authenticationUrl)
+  if (exchange.status !== 303 || redirect?.href !== new URL('/', authenticationUrl).href) {
     throw new Error(
       `browser authentication exchange returned HTTP ${String(exchange.status)} instead of a root redirect`,
     )
@@ -358,6 +363,9 @@ try {
   ]) {
     if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
   }
+} catch (error) {
+  console.error(`${BIN_NAME}: ${error instanceof Error ? error.stack : String(error)}`)
+  throw error
 } finally {
   await ctx?.fiber.dispose()
   releasePackageResolver?.()
